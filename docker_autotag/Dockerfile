@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY . /app
 
+# Copy metrics helper from shared lambda layer
+COPY ../lambda/shared/python/metrics_helper.py /app/
+
 # Create required directories
 RUN mkdir -p /output/AutotagPDF \
     /output/ExtractTextInfoFromPDF \

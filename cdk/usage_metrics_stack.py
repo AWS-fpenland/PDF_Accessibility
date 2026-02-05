@@ -31,11 +31,10 @@ class UsageMetricsDashboard(Stack):
             )
         )
         
-        # Pages processed metrics
-        pages_metric = cloudwatch.Metric(
-            namespace="PDFAccessibility",
-            metric_name="PagesProcessed",
-            statistic="Sum",
+        # Pages processed metrics - use SEARCH to aggregate across all dimensions
+        pages_metric = cloudwatch.MathExpression(
+            expression="SEARCH('{PDFAccessibility,Service} MetricName=\"PagesProcessed\"', 'Sum', 3600)",
+            label="Total Pages Processed",
             period=Duration.hours(1)
         )
         

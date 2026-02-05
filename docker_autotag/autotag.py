@@ -88,7 +88,6 @@ from adobe.pdfservices.operation.pdfjobs.result.autotag_pdf_result import Autota
 
 # Import metrics helper
 try:
-    sys.path.append('/opt/python')
     from metrics_helper import track_adobe_api_call, track_bedrock_invocation, MetricsContext
 except ImportError:
     print("Warning: metrics_helper not available")
