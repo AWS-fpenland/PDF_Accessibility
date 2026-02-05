@@ -94,6 +94,34 @@ def lambda_handler(event, context):
         
         print(f"[INFO] Processing s3://{bucket}/{key}")
         
+        # Apply user tags from metadata (for UI uploads)
+        try:
+            head_response = s3.head_object(Bucket=bucket, Key=key)
+            metadata = head_response.get('Metadata', {})
+            user_sub = metadata.get('user-sub', 'anonymous')
+            
+            # Get existing tags
+            try:
+                existing_tags = s3.get_object_tagging(Bucket=bucket, Key=key)
+                tags = {tag['Key']: tag['Value'] for tag in existing_tags.get('TagSet', [])}
+            except:
+                tags = {}
+            
+            # Add UserId tag if not already present
+            if 'UserId' not in tags:
+                tags['UserId'] = user_sub
+                if metadata.get('user-groups'):
+                    tags['UserGroups'] = metadata.get('user-groups')
+                
+                s3.put_object_tagging(
+                    Bucket=bucket,
+                    Key=key,
+                    Tagging={'TagSet': [{'Key': k, 'Value': v} for k, v in tags.items()]}
+                )
+                print(f"Tagged object with UserId: {user_sub}")
+        except Exception as e:
+            print(f"Could not apply user tags: {e}")
+        
         # Get user from S3 tags
         try:
             tags_response = s3.get_object_tagging(Bucket=bucket, Key=key)

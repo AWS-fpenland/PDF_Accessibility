@@ -91,29 +91,11 @@ class Pdf2HtmlStack extends Stack {
       },
     });
 
-    // === S3 Object Tagger Lambda (for user attribution) ===
-    const s3TaggerLambda = new lambda.Function(this, 'S3ObjectTagger', {
-      runtime: lambda.Runtime.PYTHON_3_12,
-      handler: 'main.lambda_handler',
-      code: lambda.Code.fromAsset('../lambda/s3_object_tagger'),
-      timeout: Duration.seconds(30),
-      memorySize: 128,
-      description: 'Tags S3 objects with UserId from metadata for metrics tracking'
-    });
-
-    bucket.grantRead(s3TaggerLambda);
-    s3TaggerLambda.addToRolePolicy(new iam.PolicyStatement({
+    // Grant tagging permissions for user attribution
+    lambdaFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['s3:GetObjectTagging', 's3:PutObjectTagging'],
       resources: [`${bucket.bucketArn}/*`]
     }));
-
-    // Trigger tagger on uploads
-    bucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(s3TaggerLambda),
-      { prefix: 'uploads/' },
-      { suffix: '.pdf' }
-    );
 
     // Configure S3 event notification to trigger Lambda
     bucket.addEventNotification(
