@@ -42,6 +42,9 @@ class PDFAccessibility(Stack):
                               allowed_origins=["*"],
                               exposed_headers=[]
                           )])
+        
+        # Expose bucket for other stacks
+        self.bucket = bucket
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
