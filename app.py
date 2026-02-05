@@ -24,6 +24,14 @@ class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
+        # Create Lambda Layer for metrics
+        metrics_layer = lambda_.LayerVersion(
+            self, "MetricsLayer",
+            code=lambda_.Code.from_asset("lambda/shared"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
+            description="Metrics helper utilities"
+        )
+
         # S3 Bucket
         bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
@@ -254,8 +262,8 @@ class PDFAccessibility(Stack):
             code=lambda_.Code.from_docker_build('lambda/add_title'),
             timeout=Duration.seconds(900),
             memory_size=1024,
-            # architecture=lambda_.Architecture.ARM_64
             architecture=lambda_arch,
+            layers=[metrics_layer]
         )
 
         # Grant the Lambda function read/write permissions to the S3 bucket
@@ -288,6 +296,7 @@ class PDFAccessibility(Stack):
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            layers=[metrics_layer]
         )
         
         a11y_precheck.add_to_role_policy(
@@ -314,6 +323,7 @@ class PDFAccessibility(Stack):
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            layers=[metrics_layer]
         )
         
         a11y_postcheck.add_to_role_policy(
@@ -361,7 +371,8 @@ class PDFAccessibility(Stack):
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build("lambda/split_pdf"),
             timeout=Duration.seconds(900),
-            memory_size=1024
+            memory_size=1024,
+            layers=[metrics_layer]
         )
 
         split_pdf_lambda.add_to_role_policy(cloudwatch_logs_policy)
@@ -458,6 +469,15 @@ class PDFAccessibility(Stack):
             ),
         )
 
+from cdk.usage_metrics_stack import UsageMetricsDashboard
+
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibility")
+pdf_stack = PDFAccessibility(app, "PDFAccessibility")
+
+# Deploy usage metrics dashboard
+UsageMetricsDashboard(
+    app, "PDFAccessibilityUsageMetrics",
+    pdf2pdf_bucket=pdf_stack.bucket.bucket_name
+)
+
 app.synth()

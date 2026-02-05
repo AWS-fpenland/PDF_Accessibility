@@ -14,6 +14,7 @@ import boto3
 import urllib.parse
 import io
 import os
+import sys
 
 # Initialize AWS clients
 cloudwatch = boto3.client('cloudwatch')
@@ -21,6 +22,18 @@ s3_client = boto3.client('s3')
 stepfunctions = boto3.client('stepfunctions')
 
 state_machine_arn = os.environ['STATE_MACHINE_ARN']
+
+# Import metrics helper
+try:
+    from metrics_helper import track_pages_processed, track_file_size, MetricsContext
+except ImportError:
+    print("Warning: metrics_helper not available, metrics will not be tracked")
+    track_pages_processed = lambda *args, **kwargs: None
+    track_file_size = lambda *args, **kwargs: None
+    class MetricsContext:
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
 
 def log_chunk_created(filename):
     """
@@ -120,8 +133,10 @@ def lambda_handler(event, context):
     Returns:
         dict: HTTP response indicating the success or failure of the Lambda function execution.
     """
+    file_basename = None
+    pdf_file_key = None
+    
     try:
-        
         print("Received event: " + json.dumps(event, indent=2))
 
         # Access the S3 event structure
@@ -133,29 +148,49 @@ def lambda_handler(event, context):
             raise ValueError("Event does not contain 'Records'. Check the S3 event structure.")
         file_basename = pdf_file_key.split('/')[-1].rsplit('.', 1)[0]
 
+        # Get user from S3 tags
+        user_id = None
+        try:
+            tags_response = s3_client.get_object_tagging(Bucket=bucket_name, Key=pdf_file_key)
+            for tag in tags_response.get('TagSet', []):
+                if tag['Key'] == 'UserId':
+                    user_id = tag['Value']
+                    break
+        except Exception as e:
+            print(f"Could not get user tags: {e}")
 
-        s3 = boto3.client('s3')
-        stepfunctions = boto3.client('stepfunctions')
+        with MetricsContext("split", user_id, pdf_file_key, "pdf2pdf"):
+            s3 = boto3.client('s3')
+            stepfunctions = boto3.client('stepfunctions')
 
-        # Get the PDF file from S3
-        response = s3.get_object(Bucket=bucket_name, Key=pdf_file_key)
-        print(f'Filename - {pdf_file_key} | The response is: {response}')
-        pdf_file_content = response['Body'].read()
-  
-        # Split the PDF into pages and upload them to S3
-        chunks = split_pdf_into_pages(pdf_file_content, pdf_file_key, s3, bucket_name, 200)
-        
-        log_chunk_created(file_basename)
+            # Get the PDF file from S3
+            response = s3.get_object(Bucket=bucket_name, Key=pdf_file_key)
+            print(f'Filename - {pdf_file_key} | The response is: {response}')
+            pdf_file_content = response['Body'].read()
+            file_size = len(pdf_file_content)
+            
+            # Track file size
+            track_file_size(file_size, user_id, pdf_file_key, "pdf2pdf")
+      
+            # Split the PDF into pages and upload them to S3
+            chunks = split_pdf_into_pages(pdf_file_content, pdf_file_key, s3, bucket_name, 200)
+            
+            # Track pages processed
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(pdf_file_content))
+            num_pages = len(reader.pages)
+            track_pages_processed(num_pages, user_id, pdf_file_key, "pdf2pdf")
+            
+            log_chunk_created(file_basename)
 
-        # Trigger Step Function with the list of chunks
-        response = stepfunctions.start_execution(
-            stateMachineArn=state_machine_arn,
-            input=json.dumps({"chunks": chunks, "s3_bucket": bucket_name})
-        )
-        print(f"Filename - {pdf_file_key} | Step Function started: {response['executionArn']}")
+            # Trigger Step Function with the list of chunks
+            response = stepfunctions.start_execution(
+                stateMachineArn=state_machine_arn,
+                input=json.dumps({"chunks": chunks, "s3_bucket": bucket_name, "user_id": user_id, "file_name": pdf_file_key})
+            )
+            print(f"Filename - {pdf_file_key} | Step Function started: {response['executionArn']}")
 
     except KeyError as e:
- 
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | KeyError: {str(e)}")
         return {
@@ -163,7 +198,6 @@ def lambda_handler(event, context):
             'body': json.dumps(f"Error: Missing key in event: {str(e)}")
         }
     except ValueError as e:
-  
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | ValueError: {str(e)}")
         return {
@@ -171,7 +205,6 @@ def lambda_handler(event, context):
             'body': json.dumps(f"Error: {str(e)}")
         }
     except Exception as e:
-
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}", exc_info=True)
         return {

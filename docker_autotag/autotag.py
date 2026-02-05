@@ -86,10 +86,24 @@ from adobe.pdfservices.operation.pdfjobs.jobs.autotag_pdf_job import AutotagPDFJ
 from adobe.pdfservices.operation.pdfjobs.params.autotag_pdf.autotag_pdf_params import AutotagPDFParams
 from adobe.pdfservices.operation.pdfjobs.result.autotag_pdf_result import AutotagPDFResult
 
+# Import metrics helper
+try:
+    sys.path.append('/opt/python')
+    from metrics_helper import track_adobe_api_call, track_bedrock_invocation, MetricsContext
+except ImportError:
+    print("Warning: metrics_helper not available")
+    track_adobe_api_call = lambda *args, **kwargs: None
+    track_bedrock_invocation = lambda *args, **kwargs: None
+    class MetricsContext:
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 s3 = boto3.client('s3')
+cloudwatch = boto3.client('cloudwatch')
 
 def download_file_from_s3(bucket_name,file_base_name, file_key, local_path):
     """
@@ -170,8 +184,10 @@ def add_viewer_preferences(pdf_path, filename):
         writer.write(f)
     logger.info(f'Filename : {filename} | Viewer preferences added to the PDF')
 
-def autotag_pdf_with_options(filename, client_id, client_secret):
+def autotag_pdf_with_options(filename, client_id, client_secret, user_id=None, file_name=None):
     try:
+        track_adobe_api_call("AutoTag", user_id, file_name)
+        
         with open(filename, 'rb') as file:
             input_stream = file.read()
         
@@ -225,8 +241,10 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
 
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logging.exception(f'Filename : {filename} | Exception encountered while executing operation: {e}')
-def extract_api(filename, client_id, client_secret):
+def extract_api(filename, client_id, client_secret, user_id=None, file_name=None):
     try:
+        track_adobe_api_call("ExtractPDF", user_id, file_name)
+        
         with open(filename, 'rb') as file:
             input_stream = file.read()
 
@@ -604,54 +622,57 @@ def main():
         bucket_name = os.getenv('S3_BUCKET_NAME')
         file_key = os.getenv('S3_FILE_KEY').split('/')[2]
         file_base_name = os.getenv('S3_FILE_KEY').split('/')[1]
+        user_id = os.getenv('USER_ID')  # Get from environment
+        
         logging.info(f'Filename : {file_key} | Bucket Name: {bucket_name}')
         if not bucket_name or not file_key:
             logging.info("Error: S3_BUCKET_NAME and S3_FILE_KEY environment variables are required.")
             return
 
-        # Define the local file path where the file will be saved
-        local_file_path = os.path.basename(file_key)  # Save the file with its original name
-        
-        # Download the file from S3
-        download_file_from_s3(bucket_name,file_base_name, file_key, local_file_path)
+        with MetricsContext("adobe_processing", user_id, file_key, "pdf2pdf"):
+            # Define the local file path where the file will be saved
+            local_file_path = os.path.basename(file_key)  # Save the file with its original name
+            
+            # Download the file from S3
+            download_file_from_s3(bucket_name,file_base_name, file_key, local_file_path)
 
-        base_filename = os.path.basename(local_file_path)
-        filename = "COMPLIANT_" + base_filename
+            base_filename = os.path.basename(local_file_path)
+            filename = "COMPLIANT_" + base_filename
 
-        client_id, client_secret = get_secret(base_filename)
+            client_id, client_secret = get_secret(base_filename)
 
-        add_viewer_preferences(local_file_path, filename)
+            add_viewer_preferences(local_file_path, filename)
 
-        autotag_pdf_with_options(filename, client_id, client_secret)
+            autotag_pdf_with_options(filename, client_id, client_secret, user_id, file_key)
 
-        extract_api(filename, client_id, client_secret)
+            extract_api(filename, client_id, client_secret, user_id, file_key)
 
-        extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
-        extract_to = f"output/zipfile/{filename}"
-        unzip_file(filename,extract_api_zip_path,extract_to)
+            extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
+            extract_to = f"output/zipfile/{filename}"
+            unzip_file(filename,extract_api_zip_path,extract_to)
 
-        with open(f"output/zipfile/{filename}/structuredData.json") as file:
-            data = json.load(file)
+            with open(f"output/zipfile/{filename}/structuredData.json") as file:
+                data = json.load(file)
 
-        pdf_document = pymupdf.open(filename)
+            pdf_document = pymupdf.open(filename)
 
-        # Add TOC entries
-        add_toc_to_pdf(filename,pdf_document,data)
+            # Add TOC entries
+            add_toc_to_pdf(filename,pdf_document,data)
 
-        pdf_document.saveIncr()
-        pdf_document.close()
-        save_to_s3(filename, bucket_name, "output_autotag",file_base_name, file_key)
+            pdf_document.saveIncr()
+            pdf_document.close()
+            save_to_s3(filename, bucket_name, "output_autotag",file_base_name, file_key)
 
-        logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
+            logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
 
-        figure_path = f"{extract_to}/figures"
-        autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
-        images_output_dir = "output/zipfile/images"
+            figure_path = f"{extract_to}/figures"
+            autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
+            images_output_dir = "output/zipfile/images"
 
-        s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
-        extract_images_from_excel(filename,figure_path,autotag_report_path,images_output_dir,bucket_name,s3_folder_autotag,file_key)
-        
-        logging.info(f'Filename : {file_key} | Processing completed for pdf file')
+            s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
+            extract_images_from_excel(filename,figure_path,autotag_report_path,images_output_dir,bucket_name,s3_folder_autotag,file_key)
+            
+            logging.info(f'Filename : {file_key} | Processing completed for pdf file')
     except Exception as e:
         logger.info(f"File: {file_base_name}, Status: Failed in First ECS task")
         logger.info(f"Filename : {file_key} | Error: {e}")

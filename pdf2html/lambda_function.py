@@ -6,9 +6,24 @@ import zipfile
 import tempfile
 import shutil
 import urllib.parse
+import sys
 from content_accessibility_utility_on_aws.api import process_pdf_accessibility
 
 s3 = boto3.client("s3")
+
+# Import metrics helper
+try:
+    sys.path.append('/opt/python')
+    from metrics_helper import track_pages_processed, track_bedrock_invocation, estimate_cost, MetricsContext
+except ImportError:
+    print("Warning: metrics_helper not available")
+    track_pages_processed = lambda *args, **kwargs: None
+    track_bedrock_invocation = lambda *args, **kwargs: None
+    estimate_cost = lambda *args, **kwargs: 0.0
+    class MetricsContext:
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
 
 def sanitize_filename(filename):
     """
@@ -54,6 +69,8 @@ def lambda_handler(event, context):
     """
     # Create a variable to track the temporary directory for cleanup in finally block
     temp_output_dir = None
+    user_id = None
+    key = None
     
     try:
         # 1) Extract bucket/key from the S3 event
@@ -76,6 +93,16 @@ def lambda_handler(event, context):
         key = urllib.parse.unquote_plus(key)
         
         print(f"[INFO] Processing s3://{bucket}/{key}")
+        
+        # Get user from S3 tags
+        try:
+            tags_response = s3.get_object_tagging(Bucket=bucket, Key=key)
+            for tag in tags_response.get('TagSet', []):
+                if tag['Key'] == 'UserId':
+                    user_id = tag['Value']
+                    break
+        except Exception as e:
+            print(f"Could not get user tags: {e}")
         
         # Enhanced filtering logic to prevent recursive processing
         # 1. Check if the key is in the uploads/ folder to prevent infinite loops
@@ -132,6 +159,8 @@ def lambda_handler(event, context):
                 "input": f"s3://{bucket}/{key}",
                 "output_dir": f"s3://{bucket}/output/{filename_base}/"
             }
+        
+        with MetricsContext("pdf2html_processing", user_id, key, "pdf2html"):
 
         # 2) Download PDF to /tmp with sanitized filename for processing
         local_in = f"/tmp/{sanitized_filename}"
@@ -163,6 +192,48 @@ def lambda_handler(event, context):
                 }
             )
             print(f"[INFO] Processing complete. Result: {conversion_result}")
+            
+            # Track metrics from usage data
+            try:
+                usage_data_path = os.path.join(temp_output_dir, "usage_data.json")
+                if os.path.exists(usage_data_path):
+                    with open(usage_data_path, 'r') as f:
+                        usage_data = json.load(f)
+                    
+                    # Track pages
+                    page_count = usage_data.get('total_pages', 0)
+                    if page_count > 0:
+                        track_pages_processed(page_count, user_id, key, "pdf2html")
+                    
+                    # Track Bedrock invocations
+                    bedrock_usage = usage_data.get('bedrock_usage', {})
+                    for model_id, model_data in bedrock_usage.items():
+                        input_tokens = model_data.get('input_tokens', 0)
+                        output_tokens = model_data.get('output_tokens', 0)
+                        invocations = model_data.get('invocations', 0)
+                        
+                        if invocations > 0:
+                            track_bedrock_invocation(
+                                model_id, input_tokens, output_tokens,
+                                user_id, key, "pdf2html"
+                            )
+                    
+                    # Estimate cost
+                    total_input_tokens = sum(m.get('input_tokens', 0) for m in bedrock_usage.values())
+                    total_output_tokens = sum(m.get('output_tokens', 0) for m in bedrock_usage.values())
+                    
+                    estimate_cost(
+                        pages=page_count,
+                        bedrock_input_tokens=total_input_tokens,
+                        bedrock_output_tokens=total_output_tokens,
+                        lambda_duration_ms=context.get_remaining_time_in_millis(),
+                        lambda_memory_mb=context.memory_limit_in_mb,
+                        user_id=user_id,
+                        file_name=key,
+                        service="pdf2html"
+                    )
+            except Exception as metrics_error:
+                print(f"[WARNING] Failed to track metrics: {metrics_error}")
         except Exception as e:
             print(f"[ERROR] Processing {key} failed: {e}")
             print(traceback.format_exc())
