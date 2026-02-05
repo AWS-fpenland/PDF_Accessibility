@@ -383,6 +383,31 @@ class PDFAccessibility(Stack):
         # S3 Permissions for Lambda
         bucket.grant_read_write(split_pdf_lambda)
 
+        # === S3 Object Tagger Lambda (for user attribution) ===
+        s3_tagger_lambda = lambda_.Function(
+            self, 'S3ObjectTagger',
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler='main.lambda_handler',
+            code=lambda_.Code.from_asset("lambda/s3_object_tagger"),
+            timeout=Duration.seconds(30),
+            memory_size=128,
+            description="Tags S3 objects with UserId from metadata for metrics tracking"
+        )
+        
+        bucket.grant_read(s3_tagger_lambda)
+        s3_tagger_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["s3:GetObjectTagging", "s3:PutObjectTagging"],
+            resources=[f"{bucket.bucket_arn}/*"]
+        ))
+        
+        # Trigger tagger BEFORE processing Lambda (higher priority)
+        bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            s3n.LambdaDestination(s3_tagger_lambda),
+            s3.NotificationKeyFilter(prefix="pdf/"),
+            s3.NotificationKeyFilter(suffix=".pdf")
+        )
+
         # Trigger Lambda on S3 Event
         bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
