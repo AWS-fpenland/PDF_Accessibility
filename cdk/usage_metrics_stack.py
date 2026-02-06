@@ -66,9 +66,8 @@ class UsageMetricsDashboard(Stack):
             log_groups.append(split_pdf_log_group)
         if python_container_log_group:
             log_groups.append(python_container_log_group)
-        # Fallback for pdf2html-only deployments
-        if not log_groups:
-            log_groups = ["/aws/lambda/Pdf2HtmlPipeline"]
+        # Always include pdf2html log group
+        log_groups.append("/aws/lambda/Pdf2HtmlPipeline")
 
         dashboard.add_widgets(
             cloudwatch.LogQueryWidget(

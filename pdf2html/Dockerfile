@@ -18,6 +18,7 @@ RUN microdnf -y update && \
 #    - lambda_function.py: our S3→/tmp entrypoint
 #    - requirements.txt: your pip deps
 COPY lambda_function.py    ./ 
+COPY metrics_helper.py     ./
 COPY requirements.txt      ./
 
 # 5. Copy your package source code

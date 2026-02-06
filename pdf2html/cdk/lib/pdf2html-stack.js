@@ -97,6 +97,12 @@ class Pdf2HtmlStack extends Stack {
       resources: [`${bucket.bucketArn}/*`]
     }));
 
+    // Grant CloudWatch metrics permissions
+    lambdaFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*']
+    }));
+
     // Configure S3 event notification to trigger Lambda
     bucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,

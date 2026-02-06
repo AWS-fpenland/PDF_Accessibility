@@ -13,7 +13,6 @@ s3 = boto3.client("s3")
 
 # Import metrics helper
 try:
-    sys.path.append('/opt/python')
     from metrics_helper import track_pages_processed, track_bedrock_invocation, estimate_cost, MetricsContext
 except ImportError:
     print("Warning: metrics_helper not available")
