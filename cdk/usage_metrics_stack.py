@@ -137,7 +137,7 @@ class UsageMetricsDashboard(Stack):
                 cloudwatch.GraphWidget(
                     title="Adobe API Calls by Operation",
                     left=[cloudwatch.MathExpression(
-                        expression="SEARCH('{PDFAccessibility} MetricName=\"AdobeAPICalls\"', 'Sum', 3600)",
+                        expression="SEARCH('{PDFAccessibility,Service,Operation,UserId} MetricName=\"AdobeAPICalls\"', 'Sum', 3600)",
                         label=""
                     )],
                     width=8, height=6,
@@ -146,7 +146,7 @@ class UsageMetricsDashboard(Stack):
                 cloudwatch.GraphWidget(
                     title="Adobe Document Transactions (Quota Usage)",
                     left=[cloudwatch.MathExpression(
-                        expression="SEARCH('{PDFAccessibility} MetricName=\"AdobeDocTransactions\"', 'Sum', 3600)",
+                        expression="SEARCH('{PDFAccessibility,Service,Operation,UserId} MetricName=\"AdobeDocTransactions\"', 'Sum', 3600)",
                         label=""
                     )],
                     width=8, height=6,
@@ -155,7 +155,7 @@ class UsageMetricsDashboard(Stack):
                 cloudwatch.SingleValueWidget(
                     title="Document Transactions (24h)",
                     metrics=[cloudwatch.MathExpression(
-                        expression="SUM(SEARCH('{PDFAccessibility} MetricName=\"AdobeDocTransactions\"', 'Sum', 86400))",
+                        expression="SUM(SEARCH('{PDFAccessibility,Service,Operation,UserId} MetricName=\"AdobeDocTransactions\"', 'Sum', 86400))",
                         label="Doc Transactions"
                     )],
                     width=8, height=6
