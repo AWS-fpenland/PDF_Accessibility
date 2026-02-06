@@ -53,31 +53,40 @@ class UsageMetricsDashboard(Stack):
         )
 
         # === SECTION 2: PER-USER BREAKDOWN ===
-        # Same SEARCH without SUM — each UserId gets its own line in the graph
+        # Log Insights table — queries structured JSON log lines emitted by Lambdas
         dashboard.add_widgets(
             cloudwatch.TextWidget(
                 markdown="## Per-User Usage",
                 width=24, height=1
             )
         )
+        
+        log_groups = []
+        if split_pdf_log_group:
+            log_groups.append(split_pdf_log_group)
+        if python_container_log_group:
+            log_groups.append(python_container_log_group)
+        # Fallback for pdf2html-only deployments
+        if not log_groups:
+            log_groups = ["/aws/lambda/Pdf2HtmlPipeline"]
+
         dashboard.add_widgets(
-            cloudwatch.GraphWidget(
-                title="Files Processed by User",
-                left=[cloudwatch.MathExpression(
-                    expression="SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'SampleCount', 3600)",
-                    label=""
-                )],
-                width=12, height=6,
-                legend_position=cloudwatch.LegendPosition.RIGHT
+            cloudwatch.LogQueryWidget(
+                title="Files & Pages Processed by User",
+                log_group_names=log_groups,
+                query_string='''filter event = "file_processed"
+| stats count() as files, sum(pageCount) as pages by userId
+| sort files desc''',
+                width=12, height=6
             ),
-            cloudwatch.GraphWidget(
-                title="Pages Processed by User",
-                left=[cloudwatch.MathExpression(
-                    expression="SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'Sum', 3600)",
-                    label=""
-                )],
-                width=12, height=6,
-                legend_position=cloudwatch.LegendPosition.RIGHT
+            cloudwatch.LogQueryWidget(
+                title="Recent Processing Activity",
+                log_group_names=log_groups,
+                query_string='''filter event = "file_processed"
+| fields @timestamp, userId, fileName, pageCount, service
+| sort @timestamp desc
+| limit 20''',
+                width=12, height=6
             )
         )
 

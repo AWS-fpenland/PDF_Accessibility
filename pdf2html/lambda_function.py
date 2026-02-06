@@ -232,6 +232,9 @@ def lambda_handler(event, context):
                     page_count = usage_data.get('total_pages', 0)
                     if page_count > 0:
                         track_pages_processed(page_count, user_id, key, "pdf2html")
+                        
+                        # Structured log for dashboard table queries
+                        print(json.dumps({"event": "file_processed", "userId": user_id or "anonymous", "fileName": key.split("/")[-1], "pageCount": page_count, "service": "pdf2html"}))
                     
                     # Track Bedrock invocations
                     bedrock_usage = usage_data.get('bedrock_usage', {})

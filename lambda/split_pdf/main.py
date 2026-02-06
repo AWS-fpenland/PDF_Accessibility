@@ -209,6 +209,10 @@ def lambda_handler(event, context):
             num_pages = len(reader.pages)
             track_pages_processed(num_pages, user_id, pdf_file_key, "pdf2pdf")
             
+            # Structured log for dashboard table queries
+            import json as _json
+            print(_json.dumps({"event": "file_processed", "userId": user_id or "anonymous", "fileName": pdf_file_key.split("/")[-1], "pageCount": num_pages, "service": "pdf2pdf"}))
+            
             log_chunk_created(file_basename)
 
             # Trigger Step Function with the list of chunks
