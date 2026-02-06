@@ -244,16 +244,11 @@ class UsageMetricsDashboard(Stack):
                 width=8, height=4
             ),
             cloudwatch.SingleValueWidget(
-                title="Estimated Cost per Page (avg)",
-                metrics=[
-                    cloudwatch.MathExpression(
-                        expression="cost / pages",
-                        using_metrics={
-                            "cost": estimated_cost,
-                            "pages": pages_metric.with_(period=Duration.hours(24))
-                        }
-                    )
-                ],
+                title="Pages Processed (24h)",
+                metrics=[cloudwatch.MathExpression(
+                    expression="SEARCH('{PDFAccessibility,Service} MetricName=\"PagesProcessed\"', 'Sum', 86400)",
+                    label="Pages"
+                )],
                 width=8, height=4
             )
         )
