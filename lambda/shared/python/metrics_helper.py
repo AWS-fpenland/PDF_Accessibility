@@ -61,8 +61,7 @@ def track_pages_processed(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName - aggregate at service/user level only
     
     emit_metric("PagesProcessed", page_count, "Count", dimensions)
 
@@ -119,8 +118,7 @@ def track_processing_duration(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("ProcessingDuration", duration_ms, "Milliseconds", dimensions)
 
@@ -139,8 +137,7 @@ def track_error(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("ErrorCount", 1, "Count", dimensions)
 
@@ -154,8 +151,7 @@ def track_file_size(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("FileSize", size_bytes, "Bytes", dimensions)
 

@@ -236,16 +236,11 @@ class UsageMetricsDashboard(Stack):
                 width=8, height=4
             ),
             cloudwatch.SingleValueWidget(
-                title="Estimated Cost per File (avg)",
-                metrics=[
-                    cloudwatch.MathExpression(
-                        expression="cost / files",
-                        using_metrics={
-                            "cost": estimated_cost,
-                            "files": files_metric.with_(period=Duration.hours(24))
-                        }
-                    )
-                ],
+                title="Files Processed (24h)",
+                metrics=[cloudwatch.MathExpression(
+                    expression="SEARCH('{PDFAccessibility,Service} MetricName=\"PagesProcessed\"', 'SampleCount', 86400)",
+                    label="Files"
+                )],
                 width=8, height=4
             ),
             cloudwatch.SingleValueWidget(
