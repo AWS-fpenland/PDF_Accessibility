@@ -128,7 +128,9 @@ class UsageMetricsDashboard(Stack):
         if pdf2pdf_bucket:
             dashboard.add_widgets(
                 cloudwatch.TextWidget(
-                    markdown="## Adobe PDF Services API Usage",
+                    markdown="## Adobe PDF Services API Usage\n\n"
+                    "AutoTag: 10 Document Transactions/page | "
+                    "ExtractPDF: 1 Document Transaction/5 pages",
                     width=24, height=1
                 )
             )
@@ -136,19 +138,28 @@ class UsageMetricsDashboard(Stack):
                 cloudwatch.GraphWidget(
                     title="Adobe API Calls by Operation",
                     left=[cloudwatch.MathExpression(
-                        expression="SEARCH('{PDFAccessibility,Service,Operation} MetricName=\"AdobeAPICalls\"', 'Sum', 3600)",
+                        expression="SEARCH('{PDFAccessibility} MetricName=\"AdobeAPICalls\"', 'Sum', 3600)",
                         label=""
                     )],
-                    width=12, height=6,
+                    width=8, height=6,
+                    legend_position=cloudwatch.LegendPosition.RIGHT
+                ),
+                cloudwatch.GraphWidget(
+                    title="Adobe Document Transactions (Quota Usage)",
+                    left=[cloudwatch.MathExpression(
+                        expression="SEARCH('{PDFAccessibility} MetricName=\"AdobeDocTransactions\"', 'Sum', 3600)",
+                        label=""
+                    )],
+                    width=8, height=6,
                     legend_position=cloudwatch.LegendPosition.RIGHT
                 ),
                 cloudwatch.SingleValueWidget(
-                    title="Total Adobe API Calls (24h)",
+                    title="Document Transactions (24h)",
                     metrics=[cloudwatch.MathExpression(
-                        expression="SUM(SEARCH('{PDFAccessibility,Service,Operation} MetricName=\"AdobeAPICalls\"', 'Sum', 86400))",
-                        label="Calls"
+                        expression="SUM(SEARCH('{PDFAccessibility} MetricName=\"AdobeDocTransactions\"', 'Sum', 86400))",
+                        label="Doc Transactions"
                     )],
-                    width=12, height=6
+                    width=8, height=6
                 )
             )
 

@@ -67,10 +67,16 @@ def track_pages_processed(
 
 def track_adobe_api_call(
     operation: str,
+    page_count: int = 0,
     user_id: Optional[str] = None,
     file_name: Optional[str] = None
 ):
-    """Track Adobe API calls."""
+    """Track Adobe API calls and estimated Document Transactions.
+    
+    Adobe licensing:
+    - AutoTag: 10 Document Transactions per page
+    - ExtractPDF: 1 Document Transaction per 5 pages
+    """
     dimensions = {
         "Service": "pdf2pdf",
         "Operation": operation
@@ -79,6 +85,16 @@ def track_adobe_api_call(
         dimensions["UserId"] = user_id
     
     emit_metric("AdobeAPICalls", 1, "Count", dimensions)
+    
+    # Calculate Document Transactions per Adobe licensing
+    if page_count > 0:
+        if operation == "AutoTag":
+            doc_transactions = page_count * 10
+        elif operation == "ExtractPDF":
+            doc_transactions = -(-page_count // 5)  # ceiling division
+        else:
+            doc_transactions = 1
+        emit_metric("AdobeDocTransactions", doc_transactions, "Count", dimensions)
 
 def track_bedrock_invocation(
     model_id: str,

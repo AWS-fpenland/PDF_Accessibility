@@ -59,6 +59,7 @@ import pandas as pd
 import openpyxl
 import ast
 import os
+import io
 import boto3
 import logging
 import json
@@ -185,10 +186,11 @@ def add_viewer_preferences(pdf_path, filename):
 
 def autotag_pdf_with_options(filename, client_id, client_secret, user_id=None, file_name=None):
     try:
-        track_adobe_api_call("AutoTag", user_id, file_name)
-        
         with open(filename, 'rb') as file:
             input_stream = file.read()
+        
+        page_count = len(PdfReader(io.BytesIO(input_stream)).pages)
+        track_adobe_api_call("AutoTag", page_count, user_id, file_name)
         
 
         # Initial setup, create credentials instance
@@ -242,10 +244,11 @@ def autotag_pdf_with_options(filename, client_id, client_secret, user_id=None, f
         logging.exception(f'Filename : {filename} | Exception encountered while executing operation: {e}')
 def extract_api(filename, client_id, client_secret, user_id=None, file_name=None):
     try:
-        track_adobe_api_call("ExtractPDF", user_id, file_name)
-        
         with open(filename, 'rb') as file:
             input_stream = file.read()
+        
+        page_count = len(PdfReader(io.BytesIO(input_stream)).pages)
+        track_adobe_api_call("ExtractPDF", page_count, user_id, file_name)
 
         # Initial setup, create credentials instance
         credentials = ServicePrincipalCredentials(
