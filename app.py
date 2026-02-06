@@ -100,6 +100,10 @@ class PDFAccessibility(Stack):
             actions=["s3:*"],  # This gives access to all S3 actions
             resources=["*"],   # This applies the actions to all resources
         ))
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["cloudwatch:PutMetricData"],
+            resources=["*"]
+        ))
         ecs_task_role.add_to_policy(iam.PolicyStatement(actions=
                                                         ["secretsmanager:GetSecretValue"], 
                                                          resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/db_credentials"] )
