@@ -11,6 +11,9 @@ class UsageMetricsDashboard(Stack):
     def __init__(self, scope: Construct, construct_id: str, 
                  pdf2pdf_bucket: str = None,
                  pdf2html_bucket: str = None,
+                 split_pdf_log_group: str = None,
+                 python_container_log_group: str = None,
+                 javascript_container_log_group: str = None,
                  **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
@@ -264,11 +267,11 @@ class UsageMetricsDashboard(Stack):
         )
         
         # Log Insights queries for user usage
-        if pdf2pdf_bucket:
+        if pdf2pdf_bucket and split_pdf_log_group:
             log_groups = [
-                f"/aws/lambda/SplitPDF",
-                f"/ecs/MyFirstTaskDef/PythonContainerLogGroup",
-                f"/ecs/MySecondTaskDef/JavaScriptContainerLogGroup"
+                split_pdf_log_group,
+                python_container_log_group,
+                javascript_container_log_group
             ]
         else:
             log_groups = [f"/aws/lambda/Pdf2HtmlPipeline"]

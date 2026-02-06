@@ -481,6 +481,11 @@ class PDFAccessibility(Stack):
                 height=6
             ),
         )
+        
+        # Expose log group names for metrics dashboard
+        self.split_pdf_log_group = split_pdf_lambda_log_group_name
+        self.python_container_log_group = python_container_log_group.log_group_name
+        self.javascript_container_log_group = javascript_container_log_group.log_group_name
 
 from cdk.usage_metrics_stack import UsageMetricsDashboard
 
@@ -490,7 +495,10 @@ pdf_stack = PDFAccessibility(app, "PDFAccessibility")
 # Deploy usage metrics dashboard
 UsageMetricsDashboard(
     app, "PDFAccessibilityUsageMetrics",
-    pdf2pdf_bucket=pdf_stack.bucket.bucket_name
+    pdf2pdf_bucket=pdf_stack.bucket.bucket_name,
+    split_pdf_log_group=pdf_stack.split_pdf_log_group,
+    python_container_log_group=pdf_stack.python_container_log_group,
+    javascript_container_log_group=pdf_stack.javascript_container_log_group
 )
 
 app.synth()
