@@ -65,6 +65,16 @@ fi
 print_status "Verifying AWS credentials..."
 ACCOUNT_ID=$(aws sts get-caller-identity $AWS_PROFILE_ARG --query "Account" --output text)
 REGION=${REGION_ARG:-${AWS_DEFAULT_REGION:-$(aws configure get region $AWS_PROFILE_ARG 2>/dev/null || echo "us-east-1")}}
+
+# If Pdf2HtmlStack exists, use its region for consistency
+if [ -z "$REGION_ARG" ]; then
+    EXISTING_REGION=$(aws cloudformation describe-stacks --stack-name Pdf2HtmlStack $AWS_PROFILE_ARG --region us-east-1 --query 'Stacks[0].StackId' --output text 2>/dev/null | grep -oP ':\K[a-z]+-[a-z]+-[0-9]+' | head -1)
+    if [ -n "$EXISTING_REGION" ] && [ "$EXISTING_REGION" != "$REGION" ]; then
+        print_warning "Profile region is $REGION but Pdf2HtmlStack exists in $EXISTING_REGION"
+        print_warning "Using $EXISTING_REGION for consistency. Override with --region if needed."
+        REGION="$EXISTING_REGION"
+    fi
+fi
 print_success "Account: $ACCOUNT_ID, Region: $REGION"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
