@@ -184,6 +184,10 @@ class PDFAccessibility(Stack):
                                                   name="AWS_REGION",
                                                   value=region
                                               ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="USER_ID",
+                                                  value=sfn.JsonPath.string_at("$.user_id")
+                                              ),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(

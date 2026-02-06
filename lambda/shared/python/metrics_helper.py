@@ -77,8 +77,6 @@ def track_adobe_api_call(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("AdobeAPICalls", 1, "Count", dimensions)
 
@@ -97,8 +95,6 @@ def track_bedrock_invocation(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("BedrockInvocations", 1, "Count", dimensions)
     emit_metric("BedrockInputTokens", input_tokens, "Count", dimensions)
@@ -209,8 +205,6 @@ def estimate_cost(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("EstimatedCost", cost, "None", dimensions)
     

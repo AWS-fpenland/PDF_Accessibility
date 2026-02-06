@@ -212,6 +212,10 @@ def lambda_handler(event, context):
             log_chunk_created(file_basename)
 
             # Trigger Step Function with the list of chunks
+            # Add user_id to each chunk so Map state can pass it to ECS
+            for chunk in chunks:
+                chunk["user_id"] = user_id or ""
+            
             response = stepfunctions.start_execution(
                 stateMachineArn=state_machine_arn,
                 input=json.dumps({"chunks": chunks, "s3_bucket": bucket_name, "user_id": user_id, "file_name": pdf_file_key})
