@@ -187,7 +187,8 @@ def lambda_handler(event, context):
                 "output_dir": f"s3://{bucket}/output/{filename_base}/"
             }
         
-        with MetricsContext("pdf2html_processing", user_id, key, "pdf2html"):
+        metrics_ctx = MetricsContext("pdf2html_processing", user_id, key, "pdf2html")
+        metrics_ctx.__enter__()
 
         # 2) Download PDF to /tmp with sanitized filename for processing
         local_in = f"/tmp/{sanitized_filename}"
@@ -417,6 +418,7 @@ def lambda_handler(event, context):
             print(traceback.format_exc())
             return {"status": "error", "message": f"Zip creation or upload failed: {e}"}
 
+        metrics_ctx.__exit__(None, None, None)
         return {
             "status": "done",
             "execution_id": context.aws_request_id,
