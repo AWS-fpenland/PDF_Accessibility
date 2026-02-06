@@ -266,34 +266,38 @@ class UsageMetricsDashboard(Stack):
             )
         )
         
-        # Log Insights queries for user usage
-        if pdf2pdf_bucket and split_pdf_log_group:
-            log_groups = [
-                split_pdf_log_group,
-                python_container_log_group,
-                javascript_container_log_group
-            ]
-        else:
-            log_groups = [f"/aws/lambda/Pdf2HtmlPipeline"]
-        
+        # Per-user metrics using CloudWatch Metrics (not Log Insights)
         dashboard.add_widgets(
-            cloudwatch.LogQueryWidget(
-                title="Files Processed by User (requires user tagging)",
-                log_group_names=log_groups,
-                query_string='''fields @timestamp, userId, fileName
-                    | filter userId != ""
-                    | stats count() as fileCount by userId
-                    | sort fileCount desc''',
-                width=12, height=6
+            cloudwatch.GraphWidget(
+                title="Files Processed by User (24h)",
+                left=[cloudwatch.MathExpression(
+                    expression="SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'SampleCount', 86400)",
+                    label="Files"
+                )],
+                width=12, height=6,
+                legend_position=cloudwatch.LegendPosition.RIGHT
             ),
-            cloudwatch.LogQueryWidget(
-                title="Pages Processed by User (requires user tagging)",
-                log_group_names=log_groups,
-                query_string='''fields @timestamp, userId, pageCount
-                    | filter userId != "" and pageCount > 0
-                    | stats sum(pageCount) as totalPages by userId
-                    | sort totalPages desc''',
-                width=12, height=6
+            cloudwatch.GraphWidget(
+                title="Pages Processed by User (24h)",
+                left=[cloudwatch.MathExpression(
+                    expression="SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'Sum', 86400)",
+                    label="Pages"
+                )],
+                width=12, height=6,
+                legend_position=cloudwatch.LegendPosition.RIGHT
+            )
+        )
+        
+        # Adobe API metrics
+        dashboard.add_widgets(
+            cloudwatch.GraphWidget(
+                title="Adobe API Calls by Operation",
+                left=[cloudwatch.MathExpression(
+                    expression="SEARCH('{PDFAccessibility,Service,Operation} MetricName=\"AdobeAPICalls\"', 'Sum', 3600)",
+                    label="API Calls"
+                )],
+                width=12, height=6,
+                legend_position=cloudwatch.LegendPosition.RIGHT
             )
         )
         
