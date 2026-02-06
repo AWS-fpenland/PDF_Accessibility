@@ -31,24 +31,22 @@ class UsageMetricsDashboard(Stack):
             )
         )
         
-        # Pages processed - simple metric query
-        pages_metric = cloudwatch.Metric(
-            namespace="PDFAccessibility",
-            metric_name="PagesProcessed",
-            dimensions_map={"Service": "pdf2pdf"},
-            statistic="Sum",
-            period=Duration.hours(1)
-        )
-        
+        # Pages processed - aggregate across all users
         dashboard.add_widgets(
             cloudwatch.GraphWidget(
                 title="Pages Processed (Hourly)",
-                left=[pages_metric],
+                left=[cloudwatch.MathExpression(
+                    expression="SUM(SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'Sum', 3600))",
+                    label="Total Pages"
+                )],
                 width=12, height=6
             ),
             cloudwatch.GraphWidget(
                 title="Files Processed (Hourly)", 
-                left=[pages_metric.with_(statistic="SampleCount")],
+                left=[cloudwatch.MathExpression(
+                    expression="SUM(SEARCH('{PDFAccessibility,Service,UserId} MetricName=\"PagesProcessed\"', 'SampleCount', 3600))",
+                    label="Files"
+                )],
                 width=12, height=6
             )
         )
