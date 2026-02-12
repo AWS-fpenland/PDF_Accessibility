@@ -25,3 +25,6 @@ lambda/add_title/venv
 
 # PDF UI (separate repo)
 PDF_accessability_UI/
+
+# Stack export files
+existing-stack.json
