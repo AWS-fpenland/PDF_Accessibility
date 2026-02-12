@@ -61,27 +61,40 @@ def track_pages_processed(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName - aggregate at service/user level only
     
     emit_metric("PagesProcessed", page_count, "Count", dimensions)
 
 def track_adobe_api_call(
     operation: str,
+    page_count: int = 0,
     user_id: Optional[str] = None,
     file_name: Optional[str] = None
 ):
-    """Track Adobe API calls."""
+    """Track Adobe API calls and estimated Document Transactions.
+    
+    Adobe licensing:
+    - AutoTag: 10 Document Transactions per page
+    - ExtractPDF: 1 Document Transaction per 5 pages
+    """
     dimensions = {
         "Service": "pdf2pdf",
         "Operation": operation
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("AdobeAPICalls", 1, "Count", dimensions)
+    
+    # Calculate Document Transactions per Adobe licensing
+    if page_count > 0:
+        if operation == "AutoTag":
+            doc_transactions = page_count * 10
+        elif operation == "ExtractPDF":
+            doc_transactions = -(-page_count // 5)  # ceiling division
+        else:
+            doc_transactions = 1
+        emit_metric("AdobeDocTransactions", doc_transactions, "Count", dimensions)
 
 def track_bedrock_invocation(
     model_id: str,
@@ -98,8 +111,6 @@ def track_bedrock_invocation(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("BedrockInvocations", 1, "Count", dimensions)
     emit_metric("BedrockInputTokens", input_tokens, "Count", dimensions)
@@ -119,8 +130,7 @@ def track_processing_duration(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("ProcessingDuration", duration_ms, "Milliseconds", dimensions)
 
@@ -139,8 +149,7 @@ def track_error(
     }
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("ErrorCount", 1, "Count", dimensions)
 
@@ -154,8 +163,7 @@ def track_file_size(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
+    # Don't include FileName
     
     emit_metric("FileSize", size_bytes, "Bytes", dimensions)
 
@@ -213,8 +221,6 @@ def estimate_cost(
     dimensions = {"Service": service}
     if user_id:
         dimensions["UserId"] = user_id
-    if file_name:
-        dimensions["FileName"] = file_name
     
     emit_metric("EstimatedCost", cost, "None", dimensions)
     
