@@ -40,7 +40,7 @@ def lambda_handler(event, context):
             try:
                 existing_tags = s3_client.get_object_tagging(Bucket=bucket, Key=key)
                 tags = existing_tags.get('TagSet', [])
-            except:
+            except Exception:
                 tags = []
             
             # Add/update UserId tag

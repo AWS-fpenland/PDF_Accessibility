@@ -158,7 +158,7 @@ def lambda_handler(event, context):
             try:
                 existing_tags = s3_client.get_object_tagging(Bucket=bucket_name, Key=pdf_file_key)
                 tags = {tag['Key']: tag['Value'] for tag in existing_tags.get('TagSet', [])}
-            except:
+            except Exception:
                 tags = {}
             
             # Add UserId tag if not already present
