@@ -83,8 +83,8 @@ The shared library `lambda/shared/python/metrics_helper.py` provides:
 | Component | File | Metrics Tracked |
 |-----------|------|-----------------|
 | PDF Splitter Lambda | `lambda/pdf-splitter-lambda/main.py` | PagesProcessed, FileSize, ProcessingDuration, ErrorCount |
-| Adobe AutoTag (ECS) | `adobe-autotag-container/autotag.py` | AdobeAPICalls, AdobeDocTransactions, BedrockInvocations |
-| Alt Text Generator (ECS) | `alt-text-generator-container/alt-text.js` | BedrockInvocations, BedrockInputTokens, BedrockOutputTokens |
+| Adobe AutoTag (ECS) | `adobe-autotag-container/adobe_autotag_processor.py` | AdobeAPICalls, AdobeDocTransactions, BedrockInvocations |
+| Alt Text Generator (ECS) | `alt-text-generator-container/alt_text_generator.js` | BedrockInvocations, BedrockInputTokens, BedrockOutputTokens |
 | PDF-to-HTML Lambda | `pdf2html/lambda_function.py` | PagesProcessed, ProcessingDuration, EstimatedCost |
 | S3 Object Tagger | `lambda/s3_object_tagger/main.py` | User attribution via S3 tags |
 

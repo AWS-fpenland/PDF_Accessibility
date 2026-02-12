@@ -21,4 +21,4 @@ RUN npm install
 COPY . .
 
 # Define the command to run the app
-CMD ["node", "alt-text.js"]
+CMD ["node", "alt_text_generator.js"]

@@ -45,8 +45,8 @@ cdk deploy
 
 ### 3. Ensure Image is Properly Built and Pushed
 If the image size in ECR is `0.0`, try the following:
-- Open `autotag.py`, add an empty space or a newline, then save the file.
-- Do the same for your `alt-text.js`.
+- Open `adobe_autotag_processor.py`, add an empty space or a newline, then save the file.
+- Do the same for your `alt_text_generator.js`.
 - Re-run `cdk deploy` to force rebuilding and pushing the images.
 
 ### 4. Verify ECR Image Sizes
@@ -57,7 +57,7 @@ If the image size in ECR is `0.0`, try the following:
 If issues persist, retry the above steps in different orders:
 1. Update CDK
 2. Delete `cdk.out` & ECR assets
-3. Modify `autotag.py` & `alt-text.js`
+3. Modify `adobe_autotag_processor.py` & `alt_text_generator.js`
 4. Ensure images are properly built and pushed
 
 ## Expected Outcome

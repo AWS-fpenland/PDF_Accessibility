@@ -21,4 +21,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN ls -la /app
 
 # Set the command to run the Python script when the container launches
-CMD ["python", "./autotag.py"]
+CMD ["python", "./adobe_autotag_processor.py"]
