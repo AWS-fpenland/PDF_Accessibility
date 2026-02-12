@@ -67,7 +67,6 @@ import sys
 from botocore.exceptions import ClientError
 import sqlite3
 import pymupdf
-import json
 import re
 import zipfile
 from pypdf import PdfReader, PdfWriter
