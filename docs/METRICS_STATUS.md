@@ -44,7 +44,7 @@ Tagged object with UserId: a4289468-d0a1-702b-8c6a-ee09a21d3dc6
 #### 2. Adobe Metrics Still Have FileName Dimension
 **Problem**: `AdobeAPICalls` metric still includes `FileName` dimension
 **Impact**: Creates separate metric streams per file
-**Solution**: Update `docker_autotag/metrics_helper.py` to remove FileName
+**Solution**: Update `adobe-autotag-container/metrics_helper.py` to remove FileName
 
 #### 3. Inconsistent Metric Dimensions
 **Problem**: Mix of old metrics (with FileName) and new metrics (without)
@@ -131,7 +131,7 @@ cloudwatch.GraphWidget(
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Lambda: split_pdf                                           │
+│  Lambda: pdf-splitter-lambda                                  │
 │  1. Read S3 metadata (user-sub)                             │
 │  2. Apply UserId tag to S3 object                           │
 │  3. Emit metrics: PagesProcessed, FileSize                  │
@@ -140,7 +140,7 @@ cloudwatch.GraphWidget(
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ECS Task: docker_autotag                                   │
+│  ECS Task: adobe-autotag-container                          │
 │  1. Read UserId from S3 tags                                │
 │  2. Call Adobe API (AutoTag, ExtractPDF)                    │
 │  3. Emit metrics: AdobeAPICalls, ProcessingDuration         │

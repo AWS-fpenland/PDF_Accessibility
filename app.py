@@ -48,11 +48,11 @@ class PDFAccessibility(Stack):
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
-                                                         directory="docker_autotag",
+                                                         directory="adobe-autotag-container",
                                                         platform=ecr_assets.Platform.LINUX_AMD64)
 
         javascript_image_asset = ecr_assets.DockerImageAsset(self, "JavaScriptImage",
-                                                             directory="javascript_docker",
+                                                             directory="alt-text-generator-container",
                                                              platform=ecr_assets.Platform.LINUX_AMD64)
         # VPC with Public and Private Subnets
         vpc = ec2.Vpc(self, "MyVpc",
@@ -241,7 +241,7 @@ class PDFAccessibility(Stack):
             self, 'JavaLambda',
             runtime=lambda_.Runtime.JAVA_21,
             handler='com.example.App::handleRequest',
-            code=lambda_.Code.from_asset('lambda/java_lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
+            code=lambda_.Code.from_asset('lambda/pdf-merger-lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
             environment={
                 'BUCKET_NAME': bucket.bucket_name  # this line sets the environment variable
             },
@@ -270,7 +270,7 @@ class PDFAccessibility(Stack):
             self, 'AddTitleLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='myapp.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/add_title'),
+            code=lambda_.Code.from_docker_build('lambda/title-generator-lambda'),
             timeout=Duration.seconds(900),
             memory_size=1024,
             architecture=lambda_arch,
@@ -303,7 +303,7 @@ class PDFAccessibility(Stack):
             self,'accessibility_checker_before_remidiation',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessibility_checker_before_remidiation'),
+            code=lambda_.Code.from_docker_build('lambda/pre-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
@@ -330,7 +330,7 @@ class PDFAccessibility(Stack):
             self,'accessibility_checker_after_remidiation',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessability_checker_after_remidiation'),
+            code=lambda_.Code.from_docker_build('lambda/post-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
@@ -380,7 +380,7 @@ class PDFAccessibility(Stack):
             self, 'SplitPDF',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build("lambda/split_pdf"),
+            code=lambda_.Code.from_docker_build("lambda/pdf-splitter-lambda"),
             timeout=Duration.seconds(900),
             memory_size=1024,
             layers=[metrics_layer]

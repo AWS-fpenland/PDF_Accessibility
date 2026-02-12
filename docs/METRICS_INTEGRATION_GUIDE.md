@@ -5,7 +5,7 @@ This guide shows how to integrate the new usage metrics tracking into existing L
 
 ## Step 1: Update Lambda Functions
 
-### Split PDF Lambda (lambda/split_pdf/main.py)
+### Split PDF Lambda (lambda/pdf-splitter-lambda/main.py)
 
 Add at the top:
 ```python
@@ -28,7 +28,7 @@ def lambda_handler(event, context):
         track_file_size(file_size, user_id, key, "pdf2pdf")
 ```
 
-### Adobe Processing (docker_autotag/autotag.py)
+### Adobe Processing (adobe-autotag-container/autotag.py)
 
 Add at the top:
 ```python
@@ -54,7 +54,7 @@ def extract_pdf(file_path, user_id, file_name):
         # Existing extraction code...
 ```
 
-### Bedrock Invocations (javascript_docker/alt-text.js)
+### Bedrock Invocations (alt-text-generator-container/alt-text.js)
 
 Add tracking after Bedrock calls:
 ```javascript

@@ -164,12 +164,12 @@ if [ "$DEPLOY_PDF2PDF" = true ]; then
     print_status "Installing Python dependencies..."
     pip install -r requirements.txt -q
 
-    # Sync metrics_helper to docker_autotag build context
+    # Sync metrics_helper to adobe-autotag-container build context
     print_status "Syncing shared files to Docker build contexts..."
-    cp lambda/shared/python/metrics_helper.py docker_autotag/metrics_helper.py
+    cp lambda/shared/python/metrics_helper.py adobe-autotag-container/metrics_helper.py
 
     print_status "Deploying CDK stacks (PDFAccessibility + UsageMetrics)..."
-    print_status "  (CDK will automatically rebuild docker_autotag and javascript_docker images)"
+    print_status "  (CDK will automatically rebuild adobe-autotag-container and alt-text-generator-container images)"
     cdk deploy PDFAccessibility PDFAccessibilityUsageMetrics --require-approval never $AWS_PROFILE_ARG
     print_success "PDF-to-PDF deployed"
 fi

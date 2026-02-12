@@ -14,7 +14,7 @@ All observability enhancements have been seamlessly integrated into the PDF Acce
 
 ### 2. **Lambda Function Updates**
 
-#### Split PDF Lambda (`lambda/split_pdf/main.py`)
+#### Split PDF Lambda (`lambda/pdf-splitter-lambda/main.py`)
 - ✅ Import metrics helper with fallback
 - ✅ Extract user ID from S3 object tags
 - ✅ Track pages processed
@@ -22,7 +22,7 @@ All observability enhancements have been seamlessly integrated into the PDF Acce
 - ✅ Wrap processing in `MetricsContext` for automatic duration/error tracking
 - ✅ Pass user context to Step Functions
 
-#### Adobe Processing (`docker_autotag/autotag.py`)
+#### Adobe Processing (`adobe-autotag-container/autotag.py`)
 - ✅ Import metrics helper with fallback
 - ✅ Track Adobe API calls (AutoTag, ExtractPDF)
 - ✅ Wrap processing in `MetricsContext`

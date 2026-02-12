@@ -61,10 +61,10 @@ Ensure your project has the following structure:
 ```
 ├── app.py (Main CDK app)
 ├── lambda/
-│   ├── split_pdf/ (Python Lambda for splitting PDF)
-│   └── java_lambda/ (Java Lambda for merging PDFs)
-├── docker_autotag/ (Python Docker image for ECS task)
-└── javascript_docker/ (JavaScript Docker image for ECS task)
+│   ├── pdf-splitter-lambda/ (Python Lambda for splitting PDF)
+│   └── pdf-merger-lambda/ (Java Lambda for merging PDFs)
+├── adobe-autotag-container/ (Python Docker image for ECS task)
+└── alt-text-generator-container/ (JavaScript Docker image for ECS task)
 |__ client_credentials.json (The client id and client secret id for adobe)
 ```
 
