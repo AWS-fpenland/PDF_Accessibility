@@ -222,6 +222,16 @@ This solution converts PDF documents to accessible HTML format while preserving 
 - **S3 Events**: Monitor file processing status
 - **CloudWatch Metrics**: Track function performance
 
+### Usage Metrics & Observability
+
+Custom metrics are published to the `PDFAccessibility` CloudWatch namespace, providing real-time visibility into usage, costs, and performance:
+
+- **Per-user tracking**: Usage attributed to individual Cognito users via S3 object tagging
+- **Cost estimation**: Automated cost calculation for Adobe API, Bedrock, Lambda, and ECS
+- **Usage dashboard**: Dedicated `PDF-Accessibility-Usage-Metrics` CloudWatch dashboard with pages processed, API calls, token usage, error rates, and cost breakdowns
+
+For full details, see [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
+
 ## Troubleshooting
 
 ### Common Issues
