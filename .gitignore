@@ -14,9 +14,9 @@ cdk.out/
 .cdk.staging/
 __pycache__/
 *.pyc
-alt-text-generator-container/node_modules
-lambda/title-generator-lambda/venv
-
+javascript_docker/node_modules
+lambda/add_title/venv
+PDF_accessability_UI
 # IDE and editor files
 **/.vscode/
 # OS generated files
