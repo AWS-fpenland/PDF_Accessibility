@@ -13,6 +13,7 @@ class UsageMetricsDashboard(Stack):
                  split_pdf_log_group: str = None,
                  python_container_log_group: str = None,
                  javascript_container_log_group: str = None,
+                 pdf2html_log_group: str = None,
                  **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
@@ -66,8 +67,10 @@ class UsageMetricsDashboard(Stack):
             log_groups.append(split_pdf_log_group)
         if python_container_log_group:
             log_groups.append(python_container_log_group)
-        # Always include pdf2html log group
-        log_groups.append("/aws/lambda/Pdf2HtmlPipeline")
+        if javascript_container_log_group:
+            log_groups.append(javascript_container_log_group)
+        if pdf2html_log_group:
+            log_groups.append(pdf2html_log_group)
 
         dashboard.add_widgets(
             cloudwatch.LogQueryWidget(
@@ -99,25 +102,25 @@ class UsageMetricsDashboard(Stack):
         dashboard.add_widgets(
             cloudwatch.GraphWidget(
                 title="Bedrock Model Invocations",
-                left=[cloudwatch.Metric(
-                    namespace="AWS/Bedrock", metric_name="Invocations",
-                    statistic="Sum", period=Duration.hours(1)
+                left=[cloudwatch.MathExpression(
+                    expression="SUM(SEARCH('{PDFAccessibility,Service,Model} MetricName=\"BedrockInvocations\"', 'Sum', 3600))",
+                    label="Total Invocations"
                 )],
                 width=8, height=6
             ),
             cloudwatch.GraphWidget(
                 title="Bedrock Input Tokens",
-                left=[cloudwatch.Metric(
-                    namespace="AWS/Bedrock", metric_name="InputTokens",
-                    statistic="Sum", period=Duration.hours(1)
+                left=[cloudwatch.MathExpression(
+                    expression="SUM(SEARCH('{PDFAccessibility,Service,Model} MetricName=\"BedrockInputTokens\"', 'Sum', 3600))",
+                    label="Total Input Tokens"
                 )],
                 width=8, height=6
             ),
             cloudwatch.GraphWidget(
                 title="Bedrock Output Tokens",
-                left=[cloudwatch.Metric(
-                    namespace="AWS/Bedrock", metric_name="OutputTokens",
-                    statistic="Sum", period=Duration.hours(1)
+                left=[cloudwatch.MathExpression(
+                    expression="SUM(SEARCH('{PDFAccessibility,Service,Model} MetricName=\"BedrockOutputTokens\"', 'Sum', 3600))",
+                    label="Total Output Tokens"
                 )],
                 width=8, height=6
             )

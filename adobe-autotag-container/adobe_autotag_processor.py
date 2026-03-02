@@ -693,13 +693,16 @@ def main():
         logging.info(f'Filename : {file_key} | Adding viewer preferences...')
         add_viewer_preferences(local_file_path, filename)
 
+        # Get user_id from environment (passed by Step Functions)
+        user_id = os.getenv('USER_ID', '')
+
         # Run Adobe Autotag API
         logging.info(f'Filename : {file_key} | Running Adobe Autotag API...')
-        autotag_pdf_with_options(filename, client_id, client_secret)
+        autotag_pdf_with_options(filename, client_id, client_secret, user_id=user_id, file_name=file_key)
 
         # Run Adobe Extract API
         logging.info(f'Filename : {file_key} | Running Adobe Extract API...')
-        extract_api(filename, client_id, client_secret)
+        extract_api(filename, client_id, client_secret, user_id=user_id, file_name=file_key)
 
         extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
         extract_to = f"output/zipfile/{filename}"
@@ -735,6 +738,22 @@ def main():
         
         logging.info(f'Filename : {file_key} | Processing completed successfully')
         logger.info(f"File: {file_base_name}, Status: Succeeded in First ECS task")
+
+        # Emit structured log for dashboard queries
+        try:
+            from pypdf import PdfReader as _PdfReader
+            _reader = _PdfReader(filename)
+            _page_count = len(_reader.pages)
+            import json as _json
+            print(_json.dumps({
+                "event": "file_processed",
+                "userId": user_id or "anonymous",
+                "fileName": file_key,
+                "pageCount": _page_count,
+                "service": "pdf2pdf"
+            }))
+        except Exception as _e:
+            logging.warning(f"Failed to emit structured log: {_e}")
         
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")

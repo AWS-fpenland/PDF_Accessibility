@@ -534,6 +534,7 @@ UsageMetricsDashboard(
     split_pdf_log_group=pdf_stack.split_pdf_log_group,
     python_container_log_group=pdf_stack.adobe_autotag_log_group,
     javascript_container_log_group=pdf_stack.alt_text_generator_log_group,
+    pdf2html_log_group="/aws/lambda/Pdf2HtmlPipeline",
 )
 
 app.synth()
