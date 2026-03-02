@@ -14,7 +14,7 @@ import re
 
 def create_json_output_file_path():
         os.makedirs("/tmp/PDFAccessibilityChecker", exist_ok=True)
-        return f"/tmp/PDFAccessibilityChecker/result_after_remidiation.json"
+        return f"/tmp/PDFAccessibilityChecker/result_after_remediation.json"
 
 def download_file_from_s3(bucket_name,file_key, save_path, local_path):
     s3 = boto3.client('s3')
@@ -26,7 +26,7 @@ def download_file_from_s3(bucket_name,file_key, save_path, local_path):
 
 def save_to_s3(bucket_name, file_key):
     s3 = boto3.client('s3')
-    local_path = "/tmp/PDFAccessibilityChecker/result_after_remidiation.json"
+    local_path = "/tmp/PDFAccessibilityChecker/result_after_remediation.json"
 
     file_key_without_extension = os.path.splitext(file_key)[0]
     file_key_without_compliant = file_key_without_extension.replace("COMPLIANT_", "", 1)
@@ -135,7 +135,7 @@ def lambda_handler(event, context):
         print(f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}")
 
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
-        print(f'Filename : {file_basename} | Exception encountered while executing operationat post accessability check: {e}')
-        return f"Filename : {file_basename} | Exception encountered while executing operation at post accessability check: {e}"
+        print(f'Filename : {file_basename} | Exception encountered while executing operation at post accessibility check: {e}')
+        return f"Filename : {file_basename} | Exception encountered while executing operation at post accessibility check: {e}"
     return f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}"
     
