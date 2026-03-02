@@ -93,6 +93,16 @@ async function trackBedrockInvocation(modelId, inputTokens, outputTokens, userId
     ]);
 }
 
+// ============================================================================
+// MODEL CONFIGURATION - Edit these values to change the AI models used
+// ============================================================================
+// Model ID for generating alt text for images (requires vision capability)
+const MODEL_ID_ALT_TEXT = "us.amazon.nova-pro-v1:0";
+
+// Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
+const MODEL_ID_LINK_ALT_TEXT = "us.amazon.nova-lite-v1:0";
+// ============================================================================
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -105,7 +115,6 @@ function sleep(ms) {
  * 
  * @param {string} [prompt="generate alt text for this image"] - The prompt to guide the model in generating the alt text.
  * @param {Buffer} [imageBuffer=null] - The buffer containing the image data.
- * @param {string} [modelId="anthropic.claude-3-5-sonnet-20241022-v2:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<Object>} - A promise that resolves with the model's response, including the generated alt text.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
@@ -115,7 +124,6 @@ const invokeModel = async (
 ) => {
     // Create a new Bedrock Runtime client instance.
     const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    const model_arn_image = process.env.model_arn_image;
     
     // Convert the image buffer to a base64-encoded string
     const inputImageBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
@@ -156,7 +164,7 @@ const invokeModel = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: MODEL_ID_ALT_TEXT,
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -172,7 +180,7 @@ const invokeModel = async (
     try {
         const usage = responseBody.usage || {};
         await trackBedrockInvocation(
-            "us.amazon.nova-pro-v1:0",
+            MODEL_ID_ALT_TEXT,
             usage.inputTokens || 0,
             usage.outputTokens || 0,
             null,
@@ -281,17 +289,14 @@ async function generateAltText(imageObject, imageBuffer) {
  * The function sends a prompt to the model and returns the generated alt text describing the link's destination or purpose.
  * 
  * @param {string} [prompt="Generate alt text for this link"] - The prompt to guide the model in generating the alt text for the link.
- * @param {string} [modelId="us.anthropic.claude-3-haiku-20240307-v1:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<string>} - A promise that resolves with the generated alt text for the link.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
 const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link",
-    modelId = "us.amazon.nova-pro-v1:0"
 ) => {
     logger.info(`generating link alt text`);
     const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    const model_arn_link = process.env.model_arn_link
     const payload = {
         system: [
           {
@@ -319,7 +324,7 @@ const invokeModel_alt_text_links = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: MODEL_ID_LINK_ALT_TEXT,
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -335,7 +340,7 @@ const invokeModel_alt_text_links = async (
         try {
             const usage = responseBody.usage || {};
             await trackBedrockInvocation(
-                "us.amazon.nova-pro-v1:0",
+                MODEL_ID_LINK_ALT_TEXT,
                 usage.inputTokens || 0,
                 usage.outputTokens || 0,
                 null,
@@ -365,7 +370,7 @@ async function generateAltTextForLink(url) {
     1. Just give only alt text. do not give give any other word or phrases like "Here is the alt text" or "The alt text is" etc.
     2. The alt text should be clear and concise, providing a brief description of the link's destination or purpose.`;
     try {
-        return await invokeModel_alt_text_links(prompt, "us.amazon.nova-lite-v1:0");
+        return await invokeModel_alt_text_links(prompt);
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;
@@ -477,7 +482,8 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
         fs_1.unlinkSync(modifiedPdfPath);
 
     } catch (err) {
-        console.error(`Filename: ${filebasename} | Error processing PDF: ${err}`);
+        logger.error(`Filename: ${filebasename} | Error processing PDF: ${err}`);
+        throw err; // Re-throw to stop the container
     }
 }
 
@@ -547,7 +553,12 @@ async function startProcess() {
         // logger.info(`Filename: ${filebasename} | Split Lines: ${splitLines}`);
     
         let combinedResults = {};
+        let successCount = 0;
+        let failureCount = 0;
+        
         logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
+        logger.info(`Filename: ${filebasename} | Total images to process: ${imageObjects.length}`);
+        
         for (const imageObject of imageObjects) {
             try {
                 const getObjectParams = {
@@ -574,11 +585,24 @@ async function startProcess() {
                 const response = await generateAltText(imageObject, image_Buffer);
                 logger.info(`Filename: ${filebasename} | Response:${response}`);
                 Object.assign(combinedResults, JSON.parse(response));
+                successCount++;
+                logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed)`);
             } catch (error) {
-                logger.info(`Filename: ${filebasename} | Error: ${error}`);
+                failureCount++;
+                logger.error(`Filename: ${filebasename} | Alt text generation failed for image ${imageObject.id}: ${error.message || error}`);
+                logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed`);
             }
-            await sleep(5000);
+            await sleep(2000);
         }
+
+        // Check if we have any images and if all of them failed
+        if (imageObjects.length > 0 && successCount === 0) {
+            logger.error(`Filename: ${filebasename} | All ${failureCount} alt text generation requests failed - likely due to throttling or Bedrock API issues`);
+            logger.error(`File: ${filebasename}, Status: Failed in second ECS task - All Bedrock requests failed`);
+            process.exit(1);
+        }
+        
+        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed out of ${imageObjects.length} images`);
 
         let defaultText = "No text available"; 
 
