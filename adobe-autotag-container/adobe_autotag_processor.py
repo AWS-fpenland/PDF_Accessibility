@@ -738,22 +738,6 @@ def main():
         
         logging.info(f'Filename : {file_key} | Processing completed successfully')
         logger.info(f"File: {file_base_name}, Status: Succeeded in First ECS task")
-
-        # Emit structured log for dashboard queries
-        try:
-            from pypdf import PdfReader as _PdfReader
-            _reader = _PdfReader(filename)
-            _page_count = len(_reader.pages)
-            import json as _json
-            print(_json.dumps({
-                "event": "file_processed",
-                "userId": user_id or "anonymous",
-                "fileName": file_key,
-                "pageCount": _page_count,
-                "service": "pdf2pdf"
-            }))
-        except Exception as _e:
-            logging.warning(f"Failed to emit structured log: {_e}")
         
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
