@@ -222,14 +222,13 @@ def lambda_handler(event, context):
             print(f"[INFO] Processing complete. Result: {conversion_result}")
             
             # Track metrics from usage data
+            page_count = 0
             try:
                 usage_data_path = os.path.join(temp_output_dir, "usage_data.json")
-                page_count = 0
                 if os.path.exists(usage_data_path):
                     with open(usage_data_path, 'r') as f:
                         usage_data = json.load(f)
                     
-                    # Track pages
                     page_count = usage_data.get('total_pages', 0)
                     
                     # Track Bedrock invocations
@@ -259,24 +258,25 @@ def lambda_handler(event, context):
                         file_name=key,
                         service="pdf2html"
                     )
-                
-                # Fallback: count pages from the PDF if usage_data didn't provide it
+            except Exception as metrics_error:
+                print(f"[WARNING] Failed to track metrics: {metrics_error}")
+            
+            # Structured log — always emit, independent of metrics tracking
+            try:
                 if page_count == 0:
                     try:
                         from pypdf import PdfReader as _PdfReader
                         _reader = _PdfReader(local_in)
                         page_count = len(_reader.pages)
                     except Exception:
-                        page_count = 1  # At minimum we processed one file
+                        page_count = 1
                 
-                # Always emit page tracking and structured log
                 if page_count > 0:
                     track_pages_processed(page_count, user_id, key, "pdf2html")
                 
-                # Structured log for dashboard table queries
                 print(json.dumps({"event": "file_processed", "userId": user_id or "anonymous", "fileName": key.split("/")[-1], "pageCount": page_count, "service": "pdf2html"}))
-            except Exception as metrics_error:
-                print(f"[WARNING] Failed to track metrics: {metrics_error}")
+            except Exception as log_error:
+                print(f"[WARNING] Failed to emit structured log: {log_error}")
         except Exception as e:
             print(f"[ERROR] Processing {key} failed: {e}")
             print(traceback.format_exc())
