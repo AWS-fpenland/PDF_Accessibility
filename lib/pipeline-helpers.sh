@@ -76,8 +76,18 @@ validate_connection_status() {
 # Generate the JSON trust policy for a CodeBuild service role.
 # Outputs: JSON string to stdout
 generate_trust_policy() {
-  # stub — implemented in task 5.1
-  echo '{}'
+  cat <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "codebuild.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
 }
 
 # ---------------------------------------------------------------------------
@@ -90,8 +100,7 @@ generate_trust_policy() {
 generate_bucket_name() {
   local account_id="$1"
   local region="$2"
-  # stub — implemented in task 5.5
-  echo ""
+  echo "pdf2html-bucket-${account_id}-${region}"
 }
 
 # ---------------------------------------------------------------------------
@@ -103,8 +112,10 @@ generate_bucket_name() {
 # Returns: 0 if failure status (FAILED|FAULT|STOPPED|TIMED_OUT), 1 otherwise
 is_failure_status() {
   local status="$1"
-  # stub — implemented in task 5.7
-  return 1
+  case "$status" in
+    FAILED|FAULT|STOPPED|TIMED_OUT) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -222,9 +233,8 @@ resolve_cli_defaults() {
 build_ui_env() {
   local pdf2pdf_bucket="${1:-Null}"
   local pdf2html_bucket="${2:-Null}"
-  # stub — implemented in task 5.9
-  echo "PDF_TO_PDF_BUCKET=$pdf2pdf_bucket"
-  echo "PDF_TO_HTML_BUCKET=$pdf2html_bucket"
+  echo "PDF_TO_PDF_BUCKET=${pdf2pdf_bucket}"
+  echo "PDF_TO_HTML_BUCKET=${pdf2html_bucket}"
 }
 
 # ---------------------------------------------------------------------------
@@ -237,8 +247,14 @@ build_ui_env() {
 filter_projects_by_pattern() {
   local project_list="$1"
   local pattern="$2"
-  # stub — implemented in task 6.1
-  echo ""
+  while IFS= read -r project; do
+    [[ -z "$project" ]] && continue
+    # Use bash pattern matching (glob)
+    # shellcheck disable=SC2254
+    case "$project" in
+      $pattern) echo "$project" ;;
+    esac
+  done <<< "$project_list"
 }
 
 # ---------------------------------------------------------------------------
@@ -254,8 +270,23 @@ configure_source() {
   local branch="$3"
   local connection_arn="${4:-}"
   local buildspec="${5:-buildspec-unified.yml}"
-  # stub — implemented in task 5.3
-  echo '{}'
+
+  if [[ "$provider" == "codecommit" ]]; then
+    cat <<EOF
+{"type":"CODECOMMIT","location":"${url}","buildspec":"${buildspec}"}
+EOF
+  else
+    local source_type
+    case "$provider" in
+      github)    source_type="GITHUB" ;;
+      bitbucket) source_type="BITBUCKET" ;;
+      gitlab)    source_type="GITLAB" ;;
+      *)         echo "ERROR: Unknown provider: $provider" >&2; return 1 ;;
+    esac
+    cat <<EOF
+{"type":"${source_type}","location":"${url}","buildspec":"${buildspec}","auth":{"type":"CODECONNECTIONS","resource":"${connection_arn}"}}
+EOF
+  fi
 }
 
 # ---------------------------------------------------------------------------
