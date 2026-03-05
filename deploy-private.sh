@@ -236,6 +236,12 @@ validate_inputs() {
       print_error "CONNECTION_ARN is required for provider '$SOURCE_PROVIDER'"
       exit 1
     fi
+    # Validate ARN format
+    if [[ ! "$CONNECTION_ARN" =~ ^arn:aws:codeconnections:[a-z0-9-]+:[0-9]+:connection/.+$ ]]; then
+      print_error "Invalid Connection ARN format: $CONNECTION_ARN"
+      print_error "Expected format: arn:aws:codeconnections:{region}:{account}:connection/{id}"
+      exit 1
+    fi
     # Check connection status
     local conn_status
     conn_status="$(aws codeconnections get-connection \
