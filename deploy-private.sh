@@ -37,6 +37,7 @@ CONFIG_FILE=""
 CLI_BUILDSPEC=""
 CLI_PROJECT_NAME=""
 CLI_BRANCH_ENV_MAP=""
+CLI_PROFILE=""
 DO_CLEANUP="false"
 CLI_ENVIRONMENT=""
 DEPLOYED_SOLUTIONS=()
@@ -59,6 +60,7 @@ Options:
   --project-name <name>     Custom CodeBuild project name (default: pdfremediation-{timestamp})
   --branch-env-map <json>   JSON mapping of branches to environments
                             Example: '{"main":"prod","dev":"dev","feature/*":"dev"}'
+  --profile <name>          AWS CLI named profile to use for all AWS operations
   --cleanup                 List and delete pipeline resources
   --environment <name>      Target a specific environment for cleanup (with --cleanup)
   --help                    Show this help message
@@ -74,6 +76,7 @@ Environment Variables (non-interactive mode):
   BUCKET_NAME               Override S3 bucket name for pdf2html
   BDA_PROJECT_ARN           Use existing BDA project for pdf2html
   BRANCH_ENV_MAP            JSON branch-to-environment mapping
+  AWS_PROFILE               AWS CLI named profile (same as --profile flag)
 
 Config File Format:
   PRIVATE_REPO_URL=https://github.com/myorg/my-fork.git
@@ -100,6 +103,8 @@ parse_args() {
         CLI_PROJECT_NAME="$2"; shift 2 ;;
       --branch-env-map)
         CLI_BRANCH_ENV_MAP="$2"; shift 2 ;;
+      --profile)
+        CLI_PROFILE="$2"; shift 2 ;;
       --cleanup)
         DO_CLEANUP="true"; shift ;;
       --environment)
@@ -746,6 +751,11 @@ main() {
 
   # Handle cleanup mode
   if [[ "$DO_CLEANUP" == "true" ]]; then
+    # Apply AWS profile if specified (CLI flag > env var > config file)
+    if [[ -n "$CLI_PROFILE" ]]; then
+      export AWS_PROFILE="$CLI_PROFILE"
+      print_status "Using AWS profile: $AWS_PROFILE"
+    fi
     # Get account ID for policy ARN construction
     ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)" || {
       print_error "AWS CLI not configured. Run 'aws configure' first."
@@ -761,6 +771,14 @@ main() {
   print_header "================================================"
   echo ""
 
+  # Apply AWS profile if specified (CLI flag > env var > config file)
+  if [[ -n "$CLI_PROFILE" ]]; then
+    export AWS_PROFILE="$CLI_PROFILE"
+    print_status "Using AWS profile: $AWS_PROFILE"
+  elif [[ -n "${AWS_PROFILE:-}" ]]; then
+    print_status "Using AWS profile from environment: $AWS_PROFILE"
+  fi
+
   # Get AWS identity
   print_status "Verifying AWS credentials..."
   ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)" || {
@@ -774,6 +792,10 @@ main() {
   if [[ -n "$CONFIG_FILE" ]]; then
     print_status "Loading config from: $CONFIG_FILE"
     eval "$(parse_config_file "$CONFIG_FILE")" || exit 1
+    # Apply profile from config if not already set by CLI flag
+    if [[ -z "$CLI_PROFILE" && -n "${AWS_PROFILE:-}" ]]; then
+      print_status "Using AWS profile from config: $AWS_PROFILE"
+    fi
   fi
 
   # Also check BRANCH_ENV_MAP env var
