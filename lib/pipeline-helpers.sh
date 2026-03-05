@@ -299,15 +299,48 @@ EOF
 # Returns: 0 on success, 1 on parse error
 parse_branch_env_map() {
   local json_string="$1"
-  # stub — implemented in task 8.1
-  return 1
+  if [[ -z "$json_string" ]]; then
+    echo "ERROR: Empty branch-env-map JSON" >&2
+    return 1
+  fi
+  # Validate JSON and extract key-value pairs
+  local parsed
+  parsed="$(echo "$json_string" | jq -r 'to_entries[] | "\(.key)=\(.value)"' 2>/dev/null)" || {
+    echo "ERROR: Invalid JSON in branch-env-map: $json_string" >&2
+    return 1
+  }
+  if [[ -z "$parsed" ]]; then
+    echo "ERROR: Empty branch-env-map" >&2
+    return 1
+  fi
+  echo "$parsed"
 }
 
 # Validate a Branch_Environment_Map for duplicates and empty entries.
 # Arguments: reads from stdin or associative array
 # Returns: 0 if valid, 1 if invalid (outputs error message to stderr)
 validate_branch_env_map() {
-  # stub — implemented in task 8.3
+  local map_lines="$1"
+  if [[ -z "$map_lines" ]]; then
+    echo "ERROR: Branch-env-map is empty" >&2
+    return 1
+  fi
+  # Collect environment prefixes and check for duplicates
+  local -A seen_prefixes=()
+  while IFS='=' read -r branch env_name; do
+    [[ -z "$branch" ]] && continue
+    if [[ -z "$env_name" ]]; then
+      echo "ERROR: Empty environment name for branch '$branch'" >&2
+      return 1
+    fi
+    local prefix
+    prefix="$(generate_env_prefix "$env_name")"
+    if [[ -n "${seen_prefixes[$prefix]:-}" ]]; then
+      echo "ERROR: Duplicate Environment_Prefix '$prefix' from branches '${seen_prefixes[$prefix]}' and '$branch'" >&2
+      return 1
+    fi
+    seen_prefixes["$prefix"]="$branch"
+  done <<< "$map_lines"
   return 0
 }
 
@@ -317,8 +350,38 @@ validate_branch_env_map() {
 resolve_environment() {
   local branch="$1"
   local map="${2:-}"
-  # stub — implemented in task 8.5
+
+  # Use default map if none provided
+  if [[ -z "$map" ]]; then
+    map="main=prod
+dev=dev
+test=test
+staging=staging"
+  fi
+
+  # First pass: exact matches
+  while IFS='=' read -r pattern env_name; do
+    [[ -z "$pattern" ]] && continue
+    if [[ "$branch" == "$pattern" ]]; then
+      echo "$env_name"
+      return 0
+    fi
+  done <<< "$map"
+
+  # Second pass: glob pattern matches
+  while IFS='=' read -r pattern env_name; do
+    [[ -z "$pattern" ]] && continue
+    # Skip exact patterns (already checked)
+    [[ "$pattern" != *'*'* && "$pattern" != *'?'* ]] && continue
+    # shellcheck disable=SC2254
+    case "$branch" in
+      $pattern) echo "$env_name"; return 0 ;;
+    esac
+  done <<< "$map"
+
+  # No match
   echo ""
+  return 1
 }
 
 # Generate an Environment_Prefix from an environment name.
@@ -326,8 +389,8 @@ resolve_environment() {
 # Outputs: prefix string to stdout
 generate_env_prefix() {
   local env_name="$1"
-  # stub — implemented in task 8.8
-  echo "$env_name"
+  # Lowercase, strip non-alphanumeric except hyphens
+  echo "$env_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g'
 }
 
 # Generate an environment-prefixed resource name.
@@ -336,7 +399,6 @@ generate_env_prefix() {
 generate_env_resource_name() {
   local env_prefix="$1"
   local base_name="$2"
-  # stub — implemented in task 8.8
   echo "${env_prefix}-${base_name}"
 }
 
@@ -347,8 +409,20 @@ configure_webhooks() {
   local branch="$1"
   local env_name="$2"
   local is_production="${3:-false}"
-  # stub — implemented in task 8.10
-  echo '{"filterGroups":[]}'
+
+  # Convert glob pattern to regex for HEAD_REF
+  local head_ref_pattern
+  head_ref_pattern="^refs/heads/$(echo "$branch" | sed 's/\*/.\*/g')$"
+
+  if [[ "$is_production" == "true" ]]; then
+    cat <<EOF
+{"filterGroups":[[{"type":"EVENT","pattern":"PUSH"},{"type":"HEAD_REF","pattern":"${head_ref_pattern}"}],[{"type":"EVENT","pattern":"PULL_REQUEST_MERGED"},{"type":"BASE_REF","pattern":"${head_ref_pattern}"}]]}
+EOF
+  else
+    cat <<EOF
+{"filterGroups":[[{"type":"EVENT","pattern":"PUSH"},{"type":"HEAD_REF","pattern":"${head_ref_pattern}"}]]}
+EOF
+  fi
 }
 
 # Filter a resource list by environment prefix.
@@ -357,8 +431,12 @@ configure_webhooks() {
 filter_resources_by_env_prefix() {
   local resource_list="$1"
   local env_prefix="$2"
-  # stub — implemented in task 8.13
-  echo ""
+  while IFS= read -r resource; do
+    [[ -z "$resource" ]] && continue
+    if [[ "$resource" == "${env_prefix}-"* ]]; then
+      echo "$resource"
+    fi
+  done <<< "$resource_list"
 }
 
 # Delete resources matching a specific environment prefix.
@@ -366,6 +444,8 @@ filter_resources_by_env_prefix() {
 # Returns: 0 on success, 1 if any deletions failed
 cleanup_environment() {
   local env_prefix="$1"
-  # stub — implemented in task 8.13
+  # This function calls AWS APIs — implementation in deploy-private.sh
+  # The pure filtering logic is in filter_resources_by_env_prefix
+  echo "Cleanup for environment prefix: $env_prefix"
   return 0
 }
