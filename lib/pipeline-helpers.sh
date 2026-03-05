@@ -22,7 +22,21 @@ fi
 validate_repo_url() {
   local provider="$1"
   local url="$2"
-  # stub — implemented in task 2.1
+
+  case "$provider" in
+    github)
+      [[ "$url" =~ ^https://github\.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+(\.git)?$ ]] && return 0
+      ;;
+    codecommit)
+      [[ "$url" =~ ^https://git-codecommit\.[a-z0-9-]+\.amazonaws\.com/v1/repos/[a-zA-Z0-9._-]+$ ]] && return 0
+      ;;
+    bitbucket)
+      [[ "$url" =~ ^https://bitbucket\.org/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+(\.git)?$ ]] && return 0
+      ;;
+    gitlab)
+      [[ "$url" =~ ^https://gitlab\.com/[a-zA-Z0-9._/-]+(\.git)?$ ]] && return 0
+      ;;
+  esac
   return 1
 }
 
@@ -35,8 +49,11 @@ validate_repo_url() {
 # Outputs: resolved branch name to stdout
 resolve_branch() {
   local input="${1:-}"
-  # stub — implemented in task 2.3
-  echo "main"
+  if [[ -n "$input" ]]; then
+    echo "$input"
+  else
+    echo "main"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -48,7 +65,7 @@ resolve_branch() {
 # Returns: 0 if AVAILABLE, 1 otherwise
 validate_connection_status() {
   local status="$1"
-  # stub — implemented in task 2.5
+  [[ "$status" == "AVAILABLE" ]] && return 0
   return 1
 }
 
@@ -99,8 +116,38 @@ is_failure_status() {
 # Arguments: (implementation-specific)
 # Outputs: resolved key=value pairs to stdout
 resolve_params() {
-  # stub — implemented in task 3.3
-  :
+  # Merge parameters with precedence: CLI > env > config > defaults
+  # Reads from: CONFIG_FILE (path), CLI_* vars, and existing env vars
+  # Sets global variables for each parameter
+
+  local config_file="${CONFIG_FILE:-}"
+
+  # Load config file values (lowest precedence after defaults)
+  if [[ -n "$config_file" && -f "$config_file" ]]; then
+    local config_output
+    config_output="$(parse_config_file "$config_file")" || return 1
+    while IFS='=' read -r key value; do
+      [[ -z "$key" ]] && continue
+      # Only set if not already set by env var or CLI
+      local cli_var="CLI_${key}"
+      if [[ -z "${!cli_var:-}" && -z "${!key:-}" ]]; then
+        export "$key=$value"
+      fi
+    done <<< "$config_output"
+  fi
+
+  # CLI overrides take highest precedence
+  [[ -n "${CLI_PRIVATE_REPO_URL:-}" ]] && export PRIVATE_REPO_URL="$CLI_PRIVATE_REPO_URL"
+  [[ -n "${CLI_SOURCE_PROVIDER:-}" ]] && export SOURCE_PROVIDER="$CLI_SOURCE_PROVIDER"
+  [[ -n "${CLI_DEPLOYMENT_TYPE:-}" ]] && export DEPLOYMENT_TYPE="$CLI_DEPLOYMENT_TYPE"
+  [[ -n "${CLI_TARGET_BRANCH:-}" ]] && export TARGET_BRANCH="$CLI_TARGET_BRANCH"
+  [[ -n "${CLI_CONNECTION_ARN:-}" ]] && export CONNECTION_ARN="$CLI_CONNECTION_ARN"
+  [[ -n "${CLI_ADOBE_CLIENT_ID:-}" ]] && export ADOBE_CLIENT_ID="$CLI_ADOBE_CLIENT_ID"
+  [[ -n "${CLI_ADOBE_CLIENT_SECRET:-}" ]] && export ADOBE_CLIENT_SECRET="$CLI_ADOBE_CLIENT_SECRET"
+
+  # Apply defaults
+  TARGET_BRANCH="$(resolve_branch "${TARGET_BRANCH:-}")"
+  export TARGET_BRANCH
 }
 
 # Parse a key-value config file, skipping comments and blank lines.
@@ -108,8 +155,25 @@ resolve_params() {
 # Outputs: KEY=VALUE pairs to stdout
 parse_config_file() {
   local path="$1"
-  # stub — implemented in task 3.1
-  :
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: Config file not found: $path" >&2
+    return 1
+  fi
+  local line_num=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line_num=$((line_num + 1))
+    # Skip blank lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Strip leading/trailing whitespace
+    line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    # Validate KEY=VALUE format
+    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.* ]]; then
+      echo "$line"
+    else
+      echo "ERROR: Malformed line $line_num: $line" >&2
+      return 1
+    fi
+  done < "$path"
 }
 
 # Validate that all required parameters are present.
@@ -119,7 +183,14 @@ parse_config_file() {
 # Returns: 0 if all present, 1 if any missing
 check_required_params() {
   local non_interactive="${1:-false}"
-  # stub — implemented in task 3.5
+  local missing=()
+  [[ -z "${PRIVATE_REPO_URL:-}" ]] && missing+=("PRIVATE_REPO_URL")
+  [[ -z "${SOURCE_PROVIDER:-}" ]] && missing+=("SOURCE_PROVIDER")
+  [[ -z "${DEPLOYMENT_TYPE:-}" ]] && missing+=("DEPLOYMENT_TYPE")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "Missing required parameters: ${missing[*]}"
+    return 1
+  fi
   return 0
 }
 
@@ -129,9 +200,16 @@ check_required_params() {
 resolve_cli_defaults() {
   local buildspec_flag="${1:-}"
   local project_name_flag="${2:-}"
-  # stub — implemented in task 3.7
-  echo "buildspec-unified.yml"
-  echo "pdfremediation-$(date +%s)"
+  if [[ -n "$buildspec_flag" ]]; then
+    echo "$buildspec_flag"
+  else
+    echo "buildspec-unified.yml"
+  fi
+  if [[ -n "$project_name_flag" ]]; then
+    echo "$project_name_flag"
+  else
+    echo "pdfremediation-$(date +%s)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
