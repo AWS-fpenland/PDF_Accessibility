@@ -257,6 +257,33 @@ validate_inputs() {
       exit 1
     fi
     print_success "Connection verified: AVAILABLE"
+
+    # Ensure the connection is registered as a CodeBuild source credential.
+    # This is required for CodeBuild to use the connection when pulling source.
+    local existing_cred
+    existing_cred="$(aws codebuild list-source-credentials \
+      --query "sourceCredentialsInfos[?resource=='${CONNECTION_ARN}'].arn" \
+      --output text 2>/dev/null || echo "")"
+
+    if [[ -z "$existing_cred" || "$existing_cred" == "None" ]]; then
+      print_status "Registering connection as CodeBuild source credential..."
+      local server_type
+      case "$SOURCE_PROVIDER" in
+        github)    server_type="GITHUB" ;;
+        bitbucket) server_type="BITBUCKET" ;;
+        gitlab)    server_type="GITLAB" ;;
+      esac
+      aws codebuild import-source-credentials \
+        --server-type "$server_type" \
+        --auth-type CODECONNECTIONS \
+        --token "$CONNECTION_ARN" > /dev/null 2>&1 || {
+        print_error "Failed to register connection as source credential"
+        exit 1
+      }
+      print_success "Connection registered as source credential"
+    else
+      print_success "Connection already registered as source credential"
+    fi
   fi
 }
 
