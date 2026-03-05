@@ -25,3 +25,7 @@ PDF_accessability_UI
 
 # PDF UI (separate repo)
 PDF_accessability_UI/
+
+# Pipeline config files (may contain credentials)
+pipeline.conf
+*.conf
