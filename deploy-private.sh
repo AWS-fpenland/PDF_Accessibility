@@ -435,7 +435,7 @@ create_iam_policy() {
         {"Sid":"SM","Effect":"Allow","Action":["secretsmanager:CreateSecret","secretsmanager:UpdateSecret","secretsmanager:GetSecretValue","secretsmanager:DescribeSecret"],"Resource":"arn:aws:secretsmanager:*:*:secret:/myapp/*"},
         {"Sid":"STS","Effect":"Allow","Action":["sts:GetCallerIdentity","sts:AssumeRole"],"Resource":"*"},
         {"Sid":"SSM","Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:PutParameter"],"Resource":"arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"},
-        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
+        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection","codeconnections:GetConnectionToken","codeconnections:PassConnectionToService"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
       ]
     }'
   else
@@ -453,7 +453,7 @@ create_iam_policy() {
         {"Sid":"Logs","Effect":"Allow","Action":"logs:*","Resource":["arn:aws:logs:*:*:log-group:/aws/codebuild/*","arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*"]},
         {"Sid":"STS","Effect":"Allow","Action":["sts:GetCallerIdentity","sts:AssumeRole"],"Resource":"*"},
         {"Sid":"SSM","Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:PutParameter"],"Resource":"arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"},
-        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
+        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection","codeconnections:GetConnectionToken","codeconnections:PassConnectionToService"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
       ]
     }'
   fi
