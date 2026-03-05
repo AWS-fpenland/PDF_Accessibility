@@ -283,8 +283,11 @@ EOF
       gitlab)    source_type="GITLAB" ;;
       *)         echo "ERROR: Unknown provider: $provider" >&2; return 1 ;;
     esac
+    # Note: Do NOT include an "auth" block here. CodeBuild uses the
+    # account-level source credential registered via import-source-credentials.
+    # Including auth inline causes OAuthProviderException conflicts.
     cat <<EOF
-{"type":"${source_type}","location":"${url}","buildspec":"${buildspec}","auth":{"type":"CODECONNECTIONS","resource":"${connection_arn}"}}
+{"type":"${source_type}","location":"${url}","buildspec":"${buildspec}"}
 EOF
   fi
 }

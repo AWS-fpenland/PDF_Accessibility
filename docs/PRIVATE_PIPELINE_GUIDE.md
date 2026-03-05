@@ -188,6 +188,25 @@ Default mapping (when `--branch-env-map` is not provided and multi-env is not us
 ./deploy-private.sh --project-name my-project-name
 ```
 
+### Using a Named AWS CLI Profile
+
+```bash
+./deploy-private.sh --profile my-aws-profile
+```
+
+Or via environment variable:
+```bash
+export AWS_PROFILE=my-aws-profile
+./deploy-private.sh
+```
+
+Or in a config file:
+```
+AWS_PROFILE=my-aws-profile
+PRIVATE_REPO_URL=https://github.com/myorg/my-fork.git
+...
+```
+
 ### Modifying Infrastructure
 
 Edit CDK stack files in your private repo. On the next build (push or manual trigger), CodeBuild will deploy the updated stacks automatically.

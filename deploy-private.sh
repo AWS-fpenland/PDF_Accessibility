@@ -37,6 +37,7 @@ CONFIG_FILE=""
 CLI_BUILDSPEC=""
 CLI_PROJECT_NAME=""
 CLI_BRANCH_ENV_MAP=""
+CLI_PROFILE=""
 DO_CLEANUP="false"
 CLI_ENVIRONMENT=""
 DEPLOYED_SOLUTIONS=()
@@ -59,6 +60,7 @@ Options:
   --project-name <name>     Custom CodeBuild project name (default: pdfremediation-{timestamp})
   --branch-env-map <json>   JSON mapping of branches to environments
                             Example: '{"main":"prod","dev":"dev","feature/*":"dev"}'
+  --profile <name>          AWS CLI named profile to use for all AWS operations
   --cleanup                 List and delete pipeline resources
   --environment <name>      Target a specific environment for cleanup (with --cleanup)
   --help                    Show this help message
@@ -74,6 +76,7 @@ Environment Variables (non-interactive mode):
   BUCKET_NAME               Override S3 bucket name for pdf2html
   BDA_PROJECT_ARN           Use existing BDA project for pdf2html
   BRANCH_ENV_MAP            JSON branch-to-environment mapping
+  AWS_PROFILE               AWS CLI named profile (same as --profile flag)
 
 Config File Format:
   PRIVATE_REPO_URL=https://github.com/myorg/my-fork.git
@@ -100,6 +103,8 @@ parse_args() {
         CLI_PROJECT_NAME="$2"; shift 2 ;;
       --branch-env-map)
         CLI_BRANCH_ENV_MAP="$2"; shift 2 ;;
+      --profile)
+        CLI_PROFILE="$2"; shift 2 ;;
       --cleanup)
         DO_CLEANUP="true"; shift ;;
       --environment)
@@ -231,6 +236,12 @@ validate_inputs() {
       print_error "CONNECTION_ARN is required for provider '$SOURCE_PROVIDER'"
       exit 1
     fi
+    # Validate ARN format
+    if [[ ! "$CONNECTION_ARN" =~ ^arn:aws:codeconnections:[a-z0-9-]+:[0-9]+:connection/.+$ ]]; then
+      print_error "Invalid Connection ARN format: $CONNECTION_ARN"
+      print_error "Expected format: arn:aws:codeconnections:{region}:{account}:connection/{id}"
+      exit 1
+    fi
     # Check connection status
     local conn_status
     conn_status="$(aws codeconnections get-connection \
@@ -246,6 +257,33 @@ validate_inputs() {
       exit 1
     fi
     print_success "Connection verified: AVAILABLE"
+
+    # Ensure the connection is registered as a CodeBuild source credential.
+    # This is required for CodeBuild to use the connection when pulling source.
+    local existing_cred
+    existing_cred="$(aws codebuild list-source-credentials \
+      --query "sourceCredentialsInfos[?resource=='${CONNECTION_ARN}'].arn" \
+      --output text 2>/dev/null || echo "")"
+
+    if [[ -z "$existing_cred" || "$existing_cred" == "None" ]]; then
+      print_status "Registering connection as CodeBuild source credential..."
+      local server_type
+      case "$SOURCE_PROVIDER" in
+        github)    server_type="GITHUB" ;;
+        bitbucket) server_type="BITBUCKET" ;;
+        gitlab)    server_type="GITLAB" ;;
+      esac
+      aws codebuild import-source-credentials \
+        --server-type "$server_type" \
+        --auth-type CODECONNECTIONS \
+        --token "$CONNECTION_ARN" > /dev/null 2>&1 || {
+        print_error "Failed to register connection as source credential"
+        exit 1
+      }
+      print_success "Connection registered as source credential"
+    else
+      print_success "Connection already registered as source credential"
+    fi
   fi
 }
 
@@ -392,12 +430,12 @@ create_iam_policy() {
         {"Sid":"IAMRole","Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:PassRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:PutRolePolicy","iam:GetRolePolicy","iam:DeleteRolePolicy","iam:TagRole","iam:UntagRole","iam:ListRolePolicies","iam:ListAttachedRolePolicies","iam:UpdateAssumeRolePolicy","iam:ListRoleTags"],"Resource":["arn:aws:iam::*:role/PDFAccessibility*","arn:aws:iam::*:role/cdk-*"]},
         {"Sid":"IAMPolicy","Effect":"Allow","Action":["iam:CreatePolicy","iam:DeletePolicy","iam:GetPolicy","iam:GetPolicyVersion","iam:CreatePolicyVersion","iam:DeletePolicyVersion","iam:ListPolicyVersions"],"Resource":"arn:aws:iam::*:policy/*"},
         {"Sid":"CFN","Effect":"Allow","Action":"cloudformation:*","Resource":["arn:aws:cloudformation:*:*:stack/PDFAccessibility*/*","arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]},
-        {"Sid":"Logs","Effect":"Allow","Action":"logs:*","Resource":["arn:aws:logs:*:*:log-group:/aws/codebuild/*","arn:aws:logs:*:*:log-group:/aws/lambda/*","arn:aws:logs:*:*:log-group:/ecs/*","arn:aws:logs:*:*:log-group:/aws/states/*"]},
+        {"Sid":"Logs","Effect":"Allow","Action":"logs:*","Resource":["arn:aws:logs:*:*:log-group:/aws/codebuild/*","arn:aws:logs:*:*:log-group:/aws/codebuild/*:*","arn:aws:logs:*:*:log-group:/aws/lambda/*","arn:aws:logs:*:*:log-group:/aws/lambda/*:*","arn:aws:logs:*:*:log-group:/ecs/*","arn:aws:logs:*:*:log-group:/ecs/*:*","arn:aws:logs:*:*:log-group:/aws/states/*","arn:aws:logs:*:*:log-group:/aws/states/*:*"]},
         {"Sid":"CW","Effect":"Allow","Action":["cloudwatch:PutMetricData","cloudwatch:PutDashboard","cloudwatch:DeleteDashboards","cloudwatch:GetDashboard"],"Resource":"*"},
         {"Sid":"SM","Effect":"Allow","Action":["secretsmanager:CreateSecret","secretsmanager:UpdateSecret","secretsmanager:GetSecretValue","secretsmanager:DescribeSecret"],"Resource":"arn:aws:secretsmanager:*:*:secret:/myapp/*"},
         {"Sid":"STS","Effect":"Allow","Action":["sts:GetCallerIdentity","sts:AssumeRole"],"Resource":"*"},
         {"Sid":"SSM","Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:PutParameter"],"Resource":"arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"},
-        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
+        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection","codeconnections:GetConnectionToken","codeconnections:PassConnectionToService"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
       ]
     }'
   else
@@ -412,10 +450,10 @@ create_iam_policy() {
         {"Sid":"IAMPolicy","Effect":"Allow","Action":["iam:CreatePolicy","iam:DeletePolicy","iam:GetPolicy","iam:GetPolicyVersion","iam:CreatePolicyVersion","iam:DeletePolicyVersion","iam:ListPolicyVersions"],"Resource":"arn:aws:iam::*:policy/*"},
         {"Sid":"CFN","Effect":"Allow","Action":"cloudformation:*","Resource":["arn:aws:cloudformation:*:*:stack/Pdf2Html*/*","arn:aws:cloudformation:*:*:stack/pdf2html*/*","arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]},
         {"Sid":"Bedrock","Effect":"Allow","Action":["bedrock:CreateDataAutomationProject","bedrock:GetDataAutomationProject","bedrock:DeleteDataAutomationProject","bedrock:UpdateDataAutomationProject","bedrock:ListDataAutomationProjects"],"Resource":"*"},
-        {"Sid":"Logs","Effect":"Allow","Action":"logs:*","Resource":["arn:aws:logs:*:*:log-group:/aws/codebuild/*","arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*"]},
+        {"Sid":"Logs","Effect":"Allow","Action":"logs:*","Resource":["arn:aws:logs:*:*:log-group:/aws/codebuild/*","arn:aws:logs:*:*:log-group:/aws/codebuild/*:*","arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*","arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*:*"]},
         {"Sid":"STS","Effect":"Allow","Action":["sts:GetCallerIdentity","sts:AssumeRole"],"Resource":"*"},
         {"Sid":"SSM","Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:PutParameter"],"Resource":"arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"},
-        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
+        {"Sid":"CC","Effect":"Allow","Action":["codeconnections:UseConnection","codeconnections:GetConnection","codeconnections:GetConnectionToken","codeconnections:PassConnectionToService"],"Resource":"arn:aws:codeconnections:*:*:connection/*"}
       ]
     }'
   fi
@@ -485,16 +523,32 @@ create_codebuild_project() {
   env_json="$(echo "$env_json" | jq --argjson ev "$env_vars" '.environmentVariables = $ev')"
 
   # Create project
-  aws codebuild create-project \
+  local create_output
+  create_output="$(aws codebuild create-project \
     --name "$project_name" \
     --source "$source_json" \
     --source-version "$branch" \
     --artifacts '{"type":"NO_ARTIFACTS"}' \
     --environment "$env_json" \
     --service-role "$ROLE_ARN" \
-    --output json > /dev/null 2>&1 || {
-    print_warning "CodeBuild project may already exist, continuing..."
+    --output json 2>&1)" || {
+    # Check if it's a genuine "already exists" case
+    if echo "$create_output" | grep -qi "already exists"; then
+      print_warning "CodeBuild project '$project_name' already exists, reusing"
+    else
+      print_error "Failed to create CodeBuild project: $project_name"
+      print_error "$create_output"
+      exit 1
+    fi
   }
+
+  # Verify the project actually exists before proceeding
+  if ! aws codebuild batch-get-projects --names "$project_name" \
+      --query 'projects[0].name' --output text 2>/dev/null | grep -q "$project_name"; then
+    print_error "CodeBuild project '$project_name' not found after creation attempt"
+    print_error "Check IAM permissions and source configuration"
+    exit 1
+  fi
 
   # Configure webhooks if branch-env-map is in use
   if [[ -n "$env_name" ]]; then
@@ -746,6 +800,11 @@ main() {
 
   # Handle cleanup mode
   if [[ "$DO_CLEANUP" == "true" ]]; then
+    # Apply AWS profile if specified (CLI flag > env var > config file)
+    if [[ -n "$CLI_PROFILE" ]]; then
+      export AWS_PROFILE="$CLI_PROFILE"
+      print_status "Using AWS profile: $AWS_PROFILE"
+    fi
     # Get account ID for policy ARN construction
     ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)" || {
       print_error "AWS CLI not configured. Run 'aws configure' first."
@@ -761,6 +820,14 @@ main() {
   print_header "================================================"
   echo ""
 
+  # Apply AWS profile if specified (CLI flag > env var > config file)
+  if [[ -n "$CLI_PROFILE" ]]; then
+    export AWS_PROFILE="$CLI_PROFILE"
+    print_status "Using AWS profile: $AWS_PROFILE"
+  elif [[ -n "${AWS_PROFILE:-}" ]]; then
+    print_status "Using AWS profile from environment: $AWS_PROFILE"
+  fi
+
   # Get AWS identity
   print_status "Verifying AWS credentials..."
   ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)" || {
@@ -774,6 +841,10 @@ main() {
   if [[ -n "$CONFIG_FILE" ]]; then
     print_status "Loading config from: $CONFIG_FILE"
     eval "$(parse_config_file "$CONFIG_FILE")" || exit 1
+    # Apply profile from config if not already set by CLI flag
+    if [[ -z "$CLI_PROFILE" && -n "${AWS_PROFILE:-}" ]]; then
+      print_status "Using AWS profile from config: $AWS_PROFILE"
+    fi
   fi
 
   # Also check BRANCH_ENV_MAP env var
