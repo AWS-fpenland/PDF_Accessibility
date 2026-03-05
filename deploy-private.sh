@@ -1112,6 +1112,12 @@ deploy_single_environment() {
   local policy_name="${PROJECT_NAME}-${DEPLOYMENT_TYPE}-codebuild-policy"
   create_iam_policy "$policy_name" "$DEPLOYMENT_TYPE"
 
+  # Wait for IAM policy attachment to propagate before starting a build.
+  # Without this delay CodeBuild may fail with ACCESS_DENIED on CloudWatch Logs
+  # because the policy hasn't taken effect yet.
+  print_status "Waiting 15s for IAM policy propagation..."
+  sleep 15
+
   create_codebuild_project "$PROJECT_NAME" "" "$TARGET_BRANCH"
 
   if start_and_monitor_build "$PROJECT_NAME" "$TARGET_BRANCH"; then
