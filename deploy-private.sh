@@ -496,16 +496,32 @@ create_codebuild_project() {
   env_json="$(echo "$env_json" | jq --argjson ev "$env_vars" '.environmentVariables = $ev')"
 
   # Create project
-  aws codebuild create-project \
+  local create_output
+  create_output="$(aws codebuild create-project \
     --name "$project_name" \
     --source "$source_json" \
     --source-version "$branch" \
     --artifacts '{"type":"NO_ARTIFACTS"}' \
     --environment "$env_json" \
     --service-role "$ROLE_ARN" \
-    --output json > /dev/null 2>&1 || {
-    print_warning "CodeBuild project may already exist, continuing..."
+    --output json 2>&1)" || {
+    # Check if it's a genuine "already exists" case
+    if echo "$create_output" | grep -qi "already exists"; then
+      print_warning "CodeBuild project '$project_name' already exists, reusing"
+    else
+      print_error "Failed to create CodeBuild project: $project_name"
+      print_error "$create_output"
+      exit 1
+    fi
   }
+
+  # Verify the project actually exists before proceeding
+  if ! aws codebuild batch-get-projects --names "$project_name" \
+      --query 'projects[0].name' --output text 2>/dev/null | grep -q "$project_name"; then
+    print_error "CodeBuild project '$project_name' not found after creation attempt"
+    print_error "Check IAM permissions and source configuration"
+    exit 1
+  fi
 
   # Configure webhooks if branch-env-map is in use
   if [[ -n "$env_name" ]]; then
