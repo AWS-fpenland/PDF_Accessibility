@@ -8,26 +8,25 @@ This repository provides two complementary solutions for PDF accessibility:
 Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
 
 ## Disclaimers
-
 Customers are responsible for making their own independent assessment of the information in this document.
 
 This document:
 
 (a) is for informational purposes only,
 
-(b) represents current AWS product offerings and practices, which are subject to change without notice, and
+(b) references AWS product offerings and practices, which are subject to change without notice,
 
-(c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided "as is" without warranties, representations, or conditions of any kind, whether express or implied. The responsibilities and liabilities of AWS to its customers are controlled by AWS agreements, and this document is not part of, nor does it modify, any agreement between AWS and its customers.
+(c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided "as is" without warranties, representations, or conditions of any kind, whether express or implied. The responsibilities and liabilities of AWS to its customers are controlled by AWS agreements, and this document is not part of, nor does it modify, any agreement between AWS and its customers, and
 
-(d) is not to be considered a recommendation or viewpoint of AWS
+(d) is not to be considered a recommendation or viewpoint of AWS.
 
-Additionally, all prototype code and associated assets should be considered:
+Additionally, you are solely responsible for testing, security and optimizing all code and assets on GitHub repo, and all such code and assets should be considered:
 
-(a) as-is and without warranties
+(a) as-is and without warranties or representations of any kind,
 
-(b) not suitable for production environments
+(b) not suitable for production environments, or on production or other critical data, and
 
-(d) to include shortcuts in order to support rapid prototyping such as, but not limited to, relaxed authentication and authorization and a lack of strict adherence to security best practices
+(c) to include shortcuts in order to support rapid prototyping such as, but not limited to, relaxed authentication and authorization and a lack of strict adherence to security best practices.
 
 All work produced is open source. More information can be found in the GitHub repo.
 
@@ -40,6 +39,7 @@ All work produced is open source. More information can be found in the GitHub re
 | [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution                     |
 | [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution)                 | PDF format preservation solution details                |
 | [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution)               | HTML conversion solution details                        |
+| [Configuring Limits](docs/CONFIGURING_LIMITS.md)                                   | How to modify document limits, quotas, and defaults     |
 | [Monitoring](#monitoring)                                                           | System monitoring and observability                     |
 | [Troubleshooting](#troubleshooting)                                                 | Common issues and solutions                             |
 | [Contributing](#contributing)                                                       | How to contribute to the project                        |
@@ -113,24 +113,20 @@ After successful deployment, the script provides specific testing instructions f
    - In the AWS S3 Console, find the bucket starting with `pdfaccessibility-`
    - This bucket was automatically created during deployment
 
-2. **Create the Input Folder**
-
-   - Create a folder named `pdf/` in the root of the bucket
-   - This is where you'll upload PDFs for processing
-
-3. **Upload Your PDF Files**
+2. **Upload Your PDF Files**
 
    - Upload any PDF file(s) to the `pdf/` folder
+   - **Note**: The `pdf/` folder is automatically created when you upload files - no manual folder creation needed
    - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
    - The process automatically triggers when files are uploaded
 
-4. **Monitor Processing**
+3. **Monitor Processing**
 
    - **Temporary Files**: A `temp/` folder will be created containing intermediate processing files
    - **Final Results**: A `result/` folder will be created with your accessibility-compliant PDF files
    - Use the CloudWatch dashboard to monitor processing progress
 
-5. **Download Results**
+4. **Download Results**
    - Navigate to the `result/` folder to access your remediated PDFs
    - Files maintain their original names with "COMPLIANT" prefix after accessibility improvements applied
 

@@ -234,6 +234,7 @@ def lambda_handler(event, context):
             'body': json.dumps(f"Error: Missing key in event: {str(e)}")
         }
     except ValueError as e:
+  
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | ValueError: {str(e)}")
         return {
@@ -241,6 +242,7 @@ def lambda_handler(event, context):
             'body': json.dumps(f"Error: {str(e)}")
         }
     except Exception as e:
+
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}", exc_info=True)
         return {
