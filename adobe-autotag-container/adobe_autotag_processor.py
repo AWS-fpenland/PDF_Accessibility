@@ -59,6 +59,7 @@ import pandas as pd
 import openpyxl
 import ast
 import os
+import io
 import boto3
 import logging
 import json
@@ -85,6 +86,18 @@ from adobe.pdfservices.operation.pdfjobs.result.extract_pdf_result import Extrac
 from adobe.pdfservices.operation.pdfjobs.jobs.autotag_pdf_job import AutotagPDFJob
 from adobe.pdfservices.operation.pdfjobs.params.autotag_pdf.autotag_pdf_params import AutotagPDFParams
 from adobe.pdfservices.operation.pdfjobs.result.autotag_pdf_result import AutotagPDFResult
+
+# Import metrics helper
+try:
+    from metrics_helper import track_adobe_api_call, track_bedrock_invocation, MetricsContext
+except ImportError:
+    print("Warning: metrics_helper not available")
+    track_adobe_api_call = lambda *args, **kwargs: None
+    track_bedrock_invocation = lambda *args, **kwargs: None
+    class MetricsContext:
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -177,7 +190,7 @@ def add_viewer_preferences(pdf_path, filename):
         writer.write(f)
     logger.info(f'Filename : {filename} | Viewer preferences added to the PDF')
 
-def autotag_pdf_with_options(filename, client_id, client_secret):
+def autotag_pdf_with_options(filename, client_id, client_secret, user_id=None, file_name=None):
     """
     Auto-tags a PDF for accessibility using Adobe PDF Services.
     
@@ -185,6 +198,8 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
         filename (str): The path to the PDF file.
         client_id (str): Adobe API client ID.
         client_secret (str): Adobe API client secret.
+        user_id (str, optional): User ID for metrics tracking.
+        file_name (str, optional): File name for metrics tracking.
         
     Raises:
         ServiceApiException: If Adobe API returns an error.
@@ -195,6 +210,8 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
         with open(filename, 'rb') as file:
             input_stream = file.read()
         
+        page_count = len(PdfReader(io.BytesIO(input_stream)).pages)
+        track_adobe_api_call("AutoTag", page_count, user_id, file_name)
 
         # Initial setup, create credentials instance
         credentials = ServicePrincipalCredentials(
@@ -248,7 +265,7 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logging.error(f'Filename : {filename} | Adobe Autotag API failed: {e}')
         raise  # Re-raise to stop the container
-def extract_api(filename, client_id, client_secret):
+def extract_api(filename, client_id, client_secret, user_id=None, file_name=None):
     """
     Extracts text, tables, and figures from a PDF using Adobe PDF Services.
     
@@ -256,6 +273,8 @@ def extract_api(filename, client_id, client_secret):
         filename (str): The path to the PDF file.
         client_id (str): Adobe API client ID.
         client_secret (str): Adobe API client secret.
+        user_id (str, optional): User ID for metrics tracking.
+        file_name (str, optional): File name for metrics tracking.
         
     Raises:
         ServiceApiException: If Adobe API returns an error.
@@ -265,6 +284,9 @@ def extract_api(filename, client_id, client_secret):
     try:
         with open(filename, 'rb') as file:
             input_stream = file.read()
+
+        page_count = len(PdfReader(io.BytesIO(input_stream)).pages)
+        track_adobe_api_call("ExtractPDF", page_count, user_id, file_name)
 
         # Initial setup, create credentials instance
         credentials = ServicePrincipalCredentials(
@@ -671,13 +693,16 @@ def main():
         logging.info(f'Filename : {file_key} | Adding viewer preferences...')
         add_viewer_preferences(local_file_path, filename)
 
+        # Get user_id from environment (passed by Step Functions)
+        user_id = os.getenv('USER_ID', '')
+
         # Run Adobe Autotag API
         logging.info(f'Filename : {file_key} | Running Adobe Autotag API...')
-        autotag_pdf_with_options(filename, client_id, client_secret)
+        autotag_pdf_with_options(filename, client_id, client_secret, user_id=user_id, file_name=file_key)
 
         # Run Adobe Extract API
         logging.info(f'Filename : {file_key} | Running Adobe Extract API...')
-        extract_api(filename, client_id, client_secret)
+        extract_api(filename, client_id, client_secret, user_id=user_id, file_name=file_key)
 
         extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
         extract_to = f"output/zipfile/{filename}"

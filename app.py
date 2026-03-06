@@ -15,6 +15,7 @@ from aws_cdk import (
     aws_logs as logs,
     aws_ecr_assets as ecr_assets,
     aws_cloudwatch as cloudwatch,
+    aws_secretsmanager as secretsmanager,
 )
 from constructs import Construct
 import platform
@@ -24,12 +25,23 @@ class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
+        # Create Lambda Layer for metrics
+        metrics_layer = lambda_.LayerVersion(
+            self, "MetricsLayer",
+            code=lambda_.Code.from_asset("lambda/shared"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
+            description="Metrics helper utilities"
+        )
+
         # S3 Bucket
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
                           enforce_ssl=True,
                           versioned=True,
                           removal_policy=cdk.RemovalPolicy.RETAIN)
+        
+        # Expose bucket for other stacks
+        self.bucket = pdf_processing_bucket
         
         # Get account and region for use throughout the stack
         account_id = Stack.of(self).account
@@ -130,6 +142,12 @@ class PDFAccessibility(Stack):
             actions=["secretsmanager:GetSecretValue"],
             resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"],
         ))
+        
+        # CloudWatch metrics permissions for observability
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["cloudwatch:PutMetricData"],
+            resources=["*"],
+        ))
         # Grant S3 read/write access to ECS Task Role
         pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
@@ -193,6 +211,10 @@ class PDFAccessibility(Stack):
                                             tasks.TaskEnvironmentVariable(
                                                   name="AWS_REGION",
                                                   value=region
+                                              ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="USER_ID",
+                                                  value=sfn.JsonPath.string_at("$.user_id")
                                               ),
                                           ]
                                       )],
@@ -281,6 +303,7 @@ class PDFAccessibility(Stack):
             memory_size=1024,
             # architecture=lambda_.Architecture.ARM_64
             architecture=lambda_arch,
+            layers=[metrics_layer],
         )
 
         # Grant the Lambda function read/write permissions to the S3 bucket
@@ -315,6 +338,7 @@ class PDFAccessibility(Stack):
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            layers=[metrics_layer],
         )
         
         pre_remediation_accessibility_checker.add_to_role_policy(
@@ -341,6 +365,7 @@ class PDFAccessibility(Stack):
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            layers=[metrics_layer],
         )
         
         post_remediation_accessibility_checker.add_to_role_policy(
@@ -388,13 +413,20 @@ class PDFAccessibility(Stack):
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build("lambda/pdf-splitter-lambda"),
             timeout=Duration.seconds(900),
-            memory_size=1024
+            memory_size=1024,
+            layers=[metrics_layer],
         )
 
         pdf_splitter_lambda.add_to_role_policy(cloudwatch_metrics_policy)
 
         # S3 Permissions for Lambda
         pdf_processing_bucket.grant_read_write(pdf_splitter_lambda)
+
+        # Grant tagging permissions for user attribution
+        pdf_splitter_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["s3:GetObjectTagging", "s3:PutObjectTagging"],
+            resources=[f"{pdf_processing_bucket.bucket_arn}/*"]
+        ))
 
         # Trigger Lambda on S3 Event
         pdf_processing_bucket.add_event_notification(
@@ -414,7 +446,7 @@ class PDFAccessibility(Stack):
         pdf_merger_lambda_log_group_name = f"/aws/lambda/{pdf_merger_lambda.function_name}"
         title_generator_lambda_log_group_name = f"/aws/lambda/{title_generator_lambda.function_name}"
         pre_remediation_checker_log_group_name = f"/aws/lambda/{pre_remediation_accessibility_checker.function_name}"
-        post_remediation_checker_log_group_name = f"aws/lambda/{post_remediation_accessibility_checker.function_name}"
+        post_remediation_checker_log_group_name = f"/aws/lambda/{post_remediation_accessibility_checker.function_name}"
 
 
 
@@ -485,6 +517,24 @@ class PDFAccessibility(Stack):
             ),
         )
 
+        # Expose log group names for metrics dashboard
+        self.split_pdf_log_group = pdf_splitter_lambda_log_group_name
+        self.adobe_autotag_log_group = adobe_autotag_log_group.log_group_name
+        self.alt_text_generator_log_group = alt_text_generator_log_group.log_group_name
+
+from cdk.usage_metrics_stack import UsageMetricsDashboard
+
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibility")
+pdf_stack = PDFAccessibility(app, "PDFAccessibility")
+
+# Deploy usage metrics dashboard
+UsageMetricsDashboard(
+    app, "PDFAccessibilityUsageMetrics",
+    pdf2pdf_bucket=pdf_stack.bucket.bucket_name,
+    split_pdf_log_group=pdf_stack.split_pdf_log_group,
+    python_container_log_group=pdf_stack.adobe_autotag_log_group,
+    javascript_container_log_group=pdf_stack.alt_text_generator_log_group,
+    pdf2html_log_group="/aws/lambda/Pdf2HtmlPipeline",
+)
+
 app.synth()

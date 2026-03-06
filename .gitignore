@@ -15,6 +15,7 @@ cdk.out/
 __pycache__/
 *.pyc
 javascript_docker/node_modules
+lambda/title-generator-lambda/venv
 lambda/add_title/venv
 PDF_accessability_UI
 # IDE and editor files
@@ -26,6 +27,8 @@ PDF_accessability_UI
 # PDF UI (separate repo)
 PDF_accessability_UI/
 
+# Stack export files
+existing-stack.json
 # Pipeline config files (may contain credentials)
 pipeline.conf
 *.conf

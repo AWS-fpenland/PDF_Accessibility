@@ -30,6 +30,7 @@
 
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
 const fs = require('fs').promises;
 const fs_1 = require('fs');
 const winston = require('winston');
@@ -64,6 +65,53 @@ const logger = winston.createLogger({
 // Create an S3 client instance.
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || process.env.CDK_DEFAULT_REGION;
 const s3Client = new S3Client({ region: AWS_REGION });
+const cloudwatchClient = new CloudWatchClient({ region: AWS_REGION });
+
+/**
+ * Emit a CloudWatch metric to the PDFAccessibility namespace.
+ */
+async function emitMetric(metricName, value, unit, dimensions) {
+    try {
+        const metricData = {
+            MetricName: metricName,
+            Value: value,
+            Unit: unit || 'Count',
+            Timestamp: new Date(),
+        };
+        if (dimensions) {
+            metricData.Dimensions = Object.entries(dimensions).map(([Name, Value]) => ({ Name, Value }));
+        }
+        await cloudwatchClient.send(new PutMetricDataCommand({
+            Namespace: 'PDFAccessibility',
+            MetricData: [metricData],
+        }));
+    } catch (e) {
+        logger.warn(`Failed to emit metric ${metricName}: ${e.message}`);
+    }
+}
+
+/**
+ * Track Bedrock invocation metrics.
+ */
+async function trackBedrockInvocation(modelId, inputTokens, outputTokens, userId, service) {
+    const dims = { Service: service || 'pdf2pdf', Model: modelId };
+    if (userId) dims.UserId = userId;
+    await Promise.all([
+        emitMetric('BedrockInvocations', 1, 'Count', dims),
+        emitMetric('BedrockInputTokens', inputTokens, 'Count', dims),
+        emitMetric('BedrockOutputTokens', outputTokens, 'Count', dims),
+    ]);
+}
+
+// ============================================================================
+// MODEL CONFIGURATION - Edit these values to change the AI models used
+// ============================================================================
+// Model ID for generating alt text for images (requires vision capability)
+const MODEL_ID_ALT_TEXT = "us.amazon.nova-pro-v1:0";
+
+// Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
+const MODEL_ID_LINK_ALT_TEXT = "us.amazon.nova-lite-v1:0";
+// ============================================================================
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -137,6 +185,21 @@ const invokeModel = async (
     const decodedResponseBody = new TextDecoder("utf-8").decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody);
     logger.info(`response of alt text: ${responseBody.output.message}`);
+
+    // Track Bedrock metrics
+    try {
+        const usage = responseBody.usage || {};
+        await trackBedrockInvocation(
+            MODEL_ID_ALT_TEXT,
+            usage.inputTokens || 0,
+            usage.outputTokens || 0,
+            null,
+            "pdf2pdf"
+        );
+    } catch (e) {
+        logger.warn(`Failed to track Bedrock metrics: ${e.message}`);
+    }
+
     return responseBody.output.message;
 };
 
@@ -240,11 +303,10 @@ async function generateAltText(imageObject, imageBuffer) {
  * @throws {Error} - Throws an error if invoking the model fails.
  */
 const invokeModel_alt_text_links = async (
-    prompt = "Generate alt text for this link"
+    prompt = "Generate alt text for this link",
 ) => {
     logger.info(`generating link alt text`);
     const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    
     const payload = {
         system: [
           {
@@ -283,6 +345,21 @@ const invokeModel_alt_text_links = async (
         const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
         const responseBody = JSON.parse(decodedResponseBody);
         logger.info(`response of alt text: ${responseBody.output.message.content[0].text}`);
+
+        // Track Bedrock metrics for link alt-text generation
+        try {
+            const usage = responseBody.usage || {};
+            await trackBedrockInvocation(
+                MODEL_ID_LINK_ALT_TEXT,
+                usage.inputTokens || 0,
+                usage.outputTokens || 0,
+                null,
+                "pdf2pdf"
+            );
+        } catch (e) {
+            logger.warn(`Failed to track Bedrock metrics: ${e.message}`);
+        }
+
         return responseBody.output.message.content[0].text;
     } catch (error) {
         console.error(`Error invoking model: ${error}`);

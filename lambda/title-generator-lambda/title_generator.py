@@ -5,6 +5,13 @@ import time
 import random
 import fitz  # PyMuPDF
 
+# Import metrics helper
+try:
+    from metrics_helper import track_bedrock_invocation
+except ImportError:
+    print("Warning: metrics_helper not available")
+    track_bedrock_invocation = lambda *args, **kwargs: None
+
 # Helper function for exponential backoff and retry
 def exponential_backoff_retry(
     func,
@@ -195,6 +202,16 @@ def generate_title(extracted_text, current_title):
 
     # Extract and return the generated title
     generated_title = response['output']['message']['content'][0]['text']
+
+    # Track Bedrock usage metrics
+    try:
+        usage = response.get('usage', {})
+        input_tokens = usage.get('inputTokens', 0)
+        output_tokens = usage.get('outputTokens', 0)
+        track_bedrock_invocation(model_name, input_tokens, output_tokens, service="pdf2pdf")
+    except Exception as e:
+        print(f"(generate_title) Failed to track Bedrock metrics: {e}")
+
     return generated_title.strip('"')
 
 

@@ -122,6 +122,18 @@ class Pdf2HtmlStack extends Stack {
       },
     });
 
+    // Grant tagging permissions for user attribution
+    lambdaFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObjectTagging', 's3:PutObjectTagging'],
+      resources: [`${bucket.bucketArn}/*`]
+    }));
+
+    // Grant CloudWatch metrics permissions
+    lambdaFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*']
+    }));
+
     // Configure S3 event notification to trigger Lambda
     bucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
