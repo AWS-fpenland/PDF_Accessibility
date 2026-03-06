@@ -446,7 +446,7 @@ class PDFAccessibility(Stack):
         pdf_merger_lambda_log_group_name = f"/aws/lambda/{pdf_merger_lambda.function_name}"
         title_generator_lambda_log_group_name = f"/aws/lambda/{title_generator_lambda.function_name}"
         pre_remediation_checker_log_group_name = f"/aws/lambda/{pre_remediation_accessibility_checker.function_name}"
-        post_remediation_checker_log_group_name = f"aws/lambda/{post_remediation_accessibility_checker.function_name}"
+        post_remediation_checker_log_group_name = f"/aws/lambda/{post_remediation_accessibility_checker.function_name}"
 
 
 
