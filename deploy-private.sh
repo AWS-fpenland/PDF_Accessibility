@@ -39,6 +39,7 @@ CLI_PROJECT_NAME=""
 CLI_BRANCH_ENV_MAP=""
 CLI_PROFILE=""
 DO_CLEANUP="false"
+DO_MIGRATE="false"
 CLI_ENVIRONMENT=""
 DEPLOYED_SOLUTIONS=()
 PDF2PDF_BUCKET=""
@@ -61,6 +62,7 @@ Options:
   --branch-env-map <json>   JSON mapping of branches to environments
                             Example: '{"main":"prod","dev":"dev","feature/*":"dev"}'
   --profile <name>          AWS CLI named profile to use for all AWS operations
+  --migrate <project>       Migrate an existing CodeBuild project to use a private repo
   --cleanup                 List and delete pipeline resources
   --environment <name>      Target a specific environment for cleanup (with --cleanup)
   --help                    Show this help message
@@ -105,6 +107,8 @@ parse_args() {
         CLI_BRANCH_ENV_MAP="$2"; shift 2 ;;
       --profile)
         CLI_PROFILE="$2"; shift 2 ;;
+      --migrate)
+        DO_MIGRATE="true"; CLI_PROJECT_NAME="$2"; shift 2 ;;
       --cleanup)
         DO_CLEANUP="true"; shift ;;
       --environment)
@@ -793,6 +797,199 @@ cleanup_resources() {
 }
 
 # ---------------------------------------------------------------------------
+# Migrate Existing Project (--migrate)
+# ---------------------------------------------------------------------------
+migrate_project() {
+  local project_name="$CLI_PROJECT_NAME"
+
+  echo ""
+  print_header "🔄 Migrating CodeBuild project: $project_name"
+  print_header "================================================"
+  echo ""
+
+  # Apply AWS profile
+  if [[ -n "$CLI_PROFILE" ]]; then
+    export AWS_PROFILE="$CLI_PROFILE"
+    print_status "Using AWS profile: $AWS_PROFILE"
+  fi
+
+  # Get AWS identity
+  ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)" || {
+    print_error "AWS CLI not configured. Run 'aws configure' first."
+    exit 1
+  }
+  REGION="$(aws configure get region 2>/dev/null || echo "us-east-1")"
+  print_success "Account: $ACCOUNT_ID, Region: $REGION"
+
+  # Load config if provided
+  if [[ -n "$CONFIG_FILE" ]]; then
+    print_status "Loading config from: $CONFIG_FILE"
+    eval "$(parse_config_file "$CONFIG_FILE")" || exit 1
+  fi
+
+  # Verify project exists
+  print_status "Verifying project exists..."
+  local project_info
+  project_info="$(aws codebuild batch-get-projects --names "$project_name" \
+    --query 'projects[0]' --output json 2>/dev/null)" || {
+    print_error "Project not found: $project_name"
+    exit 1
+  }
+
+  if [[ "$project_info" == "null" || -z "$project_info" ]]; then
+    print_error "Project not found: $project_name"
+    exit 1
+  fi
+
+  local current_source
+  current_source="$(echo "$project_info" | jq -r '.source.location // "unknown"')"
+  print_status "Current source: $current_source"
+
+  # Collect new repo info
+  PRIVATE_REPO_URL="$(prompt_or_fail "PRIVATE_REPO_URL" \
+    "Enter your private repository URL: " "${PRIVATE_REPO_URL:-}")"
+  SOURCE_PROVIDER="${SOURCE_PROVIDER:-}"
+  if [[ -z "$SOURCE_PROVIDER" ]]; then
+    SOURCE_PROVIDER="$(prompt_or_fail "SOURCE_PROVIDER" \
+      "Enter source provider (github/codecommit/bitbucket/gitlab): " "")"
+  fi
+  TARGET_BRANCH="$(resolve_branch "${TARGET_BRANCH:-}")"
+
+  # Validate URL
+  if ! validate_repo_url "$SOURCE_PROVIDER" "$PRIVATE_REPO_URL"; then
+    print_error "Invalid repository URL for provider '$SOURCE_PROVIDER': $PRIVATE_REPO_URL"
+    exit 1
+  fi
+
+  # Handle connection for non-CodeCommit
+  if [[ "$SOURCE_PROVIDER" != "codecommit" ]]; then
+    if [[ -z "${CONNECTION_ARN:-}" ]]; then
+      CONNECTION_ARN="$(prompt_or_fail "CONNECTION_ARN" \
+        "Enter your AWS CodeConnections ARN: " "")"
+    fi
+
+    # Validate ARN format
+    if [[ ! "$CONNECTION_ARN" =~ ^arn:aws:codeconnections:[a-z0-9-]+:[0-9]+:connection/.+$ ]]; then
+      print_error "Invalid Connection ARN format: $CONNECTION_ARN"
+      exit 1
+    fi
+
+    # Ensure source credential is registered
+    local existing_cred
+    existing_cred="$(aws codebuild list-source-credentials \
+      --query "sourceCredentialsInfos[?resource=='${CONNECTION_ARN}'].arn" \
+      --output text 2>/dev/null || echo "")"
+
+    if [[ -z "$existing_cred" || "$existing_cred" == "None" ]]; then
+      print_status "Registering connection as source credential..."
+      local server_type
+      case "$SOURCE_PROVIDER" in
+        github)    server_type="GITHUB" ;;
+        bitbucket) server_type="BITBUCKET" ;;
+        gitlab)    server_type="GITLAB" ;;
+      esac
+      aws codebuild import-source-credentials \
+        --server-type "$server_type" \
+        --auth-type CODECONNECTIONS \
+        --token "$CONNECTION_ARN" > /dev/null 2>&1 || {
+        print_error "Failed to register connection as source credential"
+        exit 1
+      }
+      print_success "Connection registered"
+    fi
+  fi
+
+  # Build new source JSON
+  local buildspec
+  buildspec="$(echo "$project_info" | jq -r '.source.buildspec // "buildspec-unified.yml"')"
+  local new_source
+  new_source="$(configure_source "$SOURCE_PROVIDER" "$PRIVATE_REPO_URL" \
+    "$TARGET_BRANCH" "${CONNECTION_ARN:-}" "$buildspec")"
+
+  # Confirm migration
+  echo ""
+  print_status "Migration summary:"
+  print_status "  Project:    $project_name"
+  print_status "  Old source: $current_source"
+  print_status "  New source: $PRIVATE_REPO_URL"
+  print_status "  Branch:     $TARGET_BRANCH"
+  print_status "  Buildspec:  $buildspec"
+
+  if [[ "$NON_INTERACTIVE" != "true" ]]; then
+    local confirm
+    read -rp "Proceed with migration? (y/N): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+      print_status "Migration cancelled."
+      exit 0
+    fi
+  fi
+
+  # Update the project source
+  print_status "Updating project source..."
+  local update_output
+  update_output="$(aws codebuild update-project \
+    --name "$project_name" \
+    --source "$new_source" \
+    --source-version "$TARGET_BRANCH" \
+    --output json 2>&1)" || {
+    print_error "Failed to update project source"
+    print_error "$update_output"
+    exit 1
+  }
+
+  print_success "Project source updated to: $PRIVATE_REPO_URL"
+
+  # Optionally configure webhooks
+  if [[ -n "$CLI_BRANCH_ENV_MAP" ]]; then
+    print_status "Configuring webhooks for multi-environment..."
+    local map_lines
+    map_lines="$(parse_branch_env_map "$CLI_BRANCH_ENV_MAP")" || exit 1
+
+    local prod_branch=""
+    while IFS='=' read -r branch env_name; do
+      [[ -z "$branch" ]] && continue
+      [[ "$env_name" == "prod" ]] && prod_branch="$branch"
+    done <<< "$map_lines"
+
+    local is_production="false"
+    [[ -n "$prod_branch" && "$TARGET_BRANCH" == "$prod_branch" ]] && is_production="true"
+
+    local env_name
+    env_name="$(resolve_environment "$TARGET_BRANCH" "$map_lines")" || env_name=""
+
+    if [[ -n "$env_name" ]]; then
+      local webhook_json
+      webhook_json="$(configure_webhooks "$TARGET_BRANCH" "$env_name" "$is_production")"
+      local filter_groups
+      filter_groups="$(echo "$webhook_json" | jq -c '.filterGroups')"
+
+      # Delete existing webhook first (update not supported)
+      aws codebuild delete-webhook --project-name "$project_name" 2>/dev/null || true
+
+      aws codebuild create-webhook \
+        --project-name "$project_name" \
+        --filter-groups "$filter_groups" \
+        --output json > /dev/null 2>&1 || {
+        print_warning "Could not configure webhook"
+      }
+      print_success "Webhook configured for branch '$TARGET_BRANCH' → environment '$env_name'"
+    fi
+  fi
+
+  # Offer to trigger a build
+  if [[ "$NON_INTERACTIVE" != "true" ]]; then
+    local trigger
+    read -rp "Trigger a build now? (y/N): " trigger
+    if [[ "$trigger" == "y" || "$trigger" == "Y" ]]; then
+      start_and_monitor_build "$project_name" "$TARGET_BRANCH"
+    fi
+  fi
+
+  echo ""
+  print_success "Migration complete! Future builds will use: $PRIVATE_REPO_URL"
+}
+
+# ---------------------------------------------------------------------------
 # Main Orchestration (Task 13)
 # ---------------------------------------------------------------------------
 main() {
@@ -811,6 +1008,12 @@ main() {
       exit 1
     }
     cleanup_resources
+    exit $?
+  fi
+
+  # Handle migrate mode
+  if [[ "$DO_MIGRATE" == "true" ]]; then
+    migrate_project
     exit $?
   fi
 
@@ -908,6 +1111,12 @@ deploy_single_environment() {
 
   local policy_name="${PROJECT_NAME}-${DEPLOYMENT_TYPE}-codebuild-policy"
   create_iam_policy "$policy_name" "$DEPLOYMENT_TYPE"
+
+  # Wait for IAM policy attachment to propagate before starting a build.
+  # Without this delay CodeBuild may fail with ACCESS_DENIED on CloudWatch Logs
+  # because the policy hasn't taken effect yet.
+  print_status "Waiting 15s for IAM policy propagation..."
+  sleep 15
 
   create_codebuild_project "$PROJECT_NAME" "" "$TARGET_BRANCH"
 
