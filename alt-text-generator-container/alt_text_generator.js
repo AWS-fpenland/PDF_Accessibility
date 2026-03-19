@@ -103,16 +103,6 @@ async function trackBedrockInvocation(modelId, inputTokens, outputTokens, userId
     ]);
 }
 
-// ============================================================================
-// MODEL CONFIGURATION - Edit these values to change the AI models used
-// ============================================================================
-// Model ID for generating alt text for images (requires vision capability)
-const MODEL_ID_ALT_TEXT = "us.amazon.nova-pro-v1:0";
-
-// Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
-const MODEL_ID_LINK_ALT_TEXT = "us.amazon.nova-lite-v1:0";
-// ============================================================================
-
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
